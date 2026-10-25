@@ -10,7 +10,7 @@ Small, compiled stdio MCP servers that let Claude Desktop (or any MCP client) dr
 
 ## Tools
 
-- `launch-claude-code` — opens a Windows Terminal tab (WSL `Ubuntu` profile) and starts Claude Code in `project`, with an optional `task` and raw CLI `args` (e.g. `--model opus`, `--continue`).
+- `launch-claude-code` — opens a Windows Terminal tab (WSL `Ubuntu` profile) and starts Claude Code in `project`, with an optional `task`, `model` (omit to use the Claude Code default) and raw CLI `args` (e.g. `--continue`). It checks `claude` and the project headlessly first, so failures come back to the caller.
 - `run-wsl-command` — runs a bash `command` in WSL and returns its output; killed after `timeout_seconds` (default 60).
 
 Both run `bash -lc`, so your login `PATH` (e.g. `~/.local/bin`) applies.

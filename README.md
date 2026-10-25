@@ -12,8 +12,9 @@ Small, compiled stdio MCP servers that let Claude Desktop (or any MCP client) dr
 
 - `launch-claude-code` — opens a Windows Terminal tab (WSL `Ubuntu` profile) and starts Claude Code in `project`, with an optional `task`, `model` (omit to use the Claude Code default) and raw CLI `args` (e.g. `--continue`). It checks `claude` and the project headlessly first, so failures come back to the caller.
 - `run-wsl-command` — runs a bash `command` in WSL and returns its output; killed after `timeout_seconds` (default 60).
+- `launch-zed` — opens `project` in Zed (Windows app, WSL remote) as a tab of an existing WSL window, creating the directory if missing, and pre-fills an optional `task` in a new Agent Panel thread via `zed://agent?prompt=`. Zed never auto-sends it: the user reviews and presses Enter. Needs `zed` (Zed's CLI) on the Windows `PATH`. An optional `file` (relative, no `:line`, which Zed 1.25.3 mangles for WSL) is opened inside the project. Takes ~3–5 s; without `file` or `task` it only opens the project. See `spec/launch-zed.md`.
 
-Both run `bash -lc`, so your login `PATH` (e.g. `~/.local/bin`) applies.
+`launch-claude-code` and `run-wsl-command` run `bash -lc`, so your login `PATH` (e.g. `~/.local/bin`) applies.
 
 ## Build and install
 
@@ -22,7 +23,11 @@ make build-windows   # cross-compiles tools/* to bin/*.exe
 make install         # copies them to C:\Users\<you>\tools and registers them in Claude Desktop
 ```
 
-`make install` runs `register-claude-desktop.sh` (needs `jq`), which adds an `mcpServers` entry per tool to `claude_desktop_config.json`. It finds the file in `%LOCALAPPDATA%\Claude-Data\claude_*\` for the Microsoft Store build, or in `%APPDATA%\Claude\` otherwise. Quit Claude Desktop fully before installing, because it rewrites that file while running, and reopen it afterwards. Server logs are in `%LOCALAPPDATA%\Claude\logs\mcp-server-<tool>.log`.
+`make install` runs `register-claude-desktop.sh` (needs `jq`), which adds an `mcpServers` entry per tool to `claude_desktop_config.json`. It finds the file in `%LOCALAPPDATA%\Claude-Data\claude_*\` for the Microsoft Store build, or in `%APPDATA%\Claude\` otherwise. Quit Claude Desktop fully before installing, because it rewrites that file while running, and reopen it afterwards. Server logs are in `%LOCALAPPDATA%\Claude\logs\mcp-server-<tool>.log`. Each entry looks like:
+
+```json
+"launch-zed": { "command": "C:\\Users\\<you>\\tools\\launch-zed.exe" }
+```
 
 ## Adding a tool
 

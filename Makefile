@@ -9,3 +9,4 @@ build-windows:
 install: build-windows
 	mkdir -p $(INSTALL_DIR)
 	cp bin/*.exe $(INSTALL_DIR)/
+	./register-claude-desktop.sh $(INSTALL_DIR)

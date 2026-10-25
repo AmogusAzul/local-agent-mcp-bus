@@ -17,19 +17,10 @@ Small, compiled stdio MCP servers that let Claude Desktop (or any MCP client) dr
 
 ```sh
 make build-windows   # cross-compiles tools/* to bin/*.exe
-make install         # copies them to C:\Users\<you>\tools (override WIN_USER / INSTALL_DIR if needed)
+make install         # copies them to C:\Users\<you>\tools and registers them in Claude Desktop
 ```
 
-Then add one entry per tool to `%APPDATA%\Claude\claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "launch-claude-code": { "command": "C:\\Users\\<you>\\tools\\launch-claude-code.exe" },
-    "run-wsl-command": { "command": "C:\\Users\\<you>\\tools\\run-wsl-command.exe" }
-  }
-}
-```
+`make install` runs `register-claude-desktop.sh` (needs `jq`), which adds an `mcpServers` entry per tool to `claude_desktop_config.json`. It finds the file in `%LOCALAPPDATA%\Claude-Data\claude_*\` for the Microsoft Store build, or in `%APPDATA%\Claude\` otherwise. Quit Claude Desktop fully before installing, because it rewrites that file while running, and reopen it afterwards. Server logs are in `%LOCALAPPDATA%\Claude\logs\mcp-server-<tool>.log`.
 
 ## Adding a tool
 

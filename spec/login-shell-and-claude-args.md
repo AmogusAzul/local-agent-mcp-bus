@@ -22,6 +22,7 @@ From Claude Desktop, `run-wsl-command` with `which claude || find /home -name cl
 - **`launch-claude-code`: new optional `args` argument**, holding raw Claude Code CLI flags (for example `--model opus --permission-mode plan`, or `--resume`).
   - It is inserted unquoted before the prompt, so it can carry several flags. This means bash interprets it, which is the same trust level as `run-wsl-command`.
   - `task` becomes optional, so `args: "--continue"` alone works. The resulting script is `cd '<project>' && claude <args> ['<task>']`.
+  - Added during implementation: `;` in the script is escaped as `\;`, because `wt` otherwise splits its own command line at semicolons.
 
 ## Check
 

@@ -25,7 +25,10 @@ type Tool struct {
 	Name        string
 	Description string
 	Args        []Arg
-	Execute     func(ctx context.Context, args map[string]string) (string, error)
+	// Reject maps undeclared argument names to the error a call carrying them
+	// gets, so a request for an unsupported feature fails instead of being dropped.
+	Reject  map[string]string
+	Execute func(ctx context.Context, args map[string]string) (string, error)
 }
 
 // Serve registers the tools and serves MCP over stdio until stdin closes.
@@ -55,6 +58,12 @@ func toMCP(t Tool) mcp.Tool {
 
 func handler(t Tool) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		raw := req.GetArguments()
+		for name, msg := range t.Reject {
+			if _, ok := raw[name]; ok {
+				return mcp.NewToolResultError(msg), nil
+			}
+		}
 		args := make(map[string]string, len(t.Args))
 		for _, a := range t.Args {
 			v := req.GetString(a.Name, "")

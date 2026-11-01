@@ -34,9 +34,10 @@ tool should say so with a fixed error instead of half-doing it.
     page (or the error), saves the token and ends.
 - **OAuth client built in at compile time.** It's a Google Cloud "Desktop app" client,
   set to **In production** because in Testing mode tokens expire after 7 days.
-  `make build-windows` injects its ID and secret with `-ldflags -X` from
-  `GOOGLE_TASKS_CLIENT_ID` and `GOOGLE_TASKS_CLIENT_SECRET`, so they never land in
-  git. Google says desktop secrets aren't confidential, so this is fine. A binary built
+  `build.sh` (run by `make build-windows`) injects its ID and secret with
+  `-ldflags -X` from `GOOGLE_TASKS_CLIENT_ID` and `GOOGLE_TASKS_CLIENT_SECRET`. It
+  takes them from the environment, or from an untracked `local.env` at the repo root,
+  so they never land in git. Google says desktop secrets aren't confidential, so this is fine. A binary built
   without them returns `NOT_CONFIGURED`.
 - **Seven tools in one server**, named `tasks_*`: one per job keeps descriptions short
   and outputs specific.
@@ -44,8 +45,15 @@ tool should say so with a fixed error instead of half-doing it.
   - `list` is a list title (case-insensitive) or id. If it's omitted, the tool uses
     `@default`.
   - `task` is a task id or an exact title (case-insensitive) within that list.
+  - When a title matches both open and completed tasks, the open ones win. Otherwise
+    old completed copies of a chore ("Pay rent") would make every lookup ambiguous.
   - More than one match gives `AMBIGUOUS` with the candidates. There's no fuzzy
     matching, to avoid editing the wrong task. To search, use `query` in `tasks_list`.
+- **Deleting a parent deletes its subtasks explicitly** (each one first), so the
+  result doesn't depend on whether Google cascades the deletion.
+- **No `If-Match`.** Writes don't send etags: Tasks etags aren't documented as
+  reliable for this, and a spurious 412 would block edits. A 412, if Google ever
+  sends one, still maps to `CONFLICT`.
 - **Subtasks: one level, enforced by the tool.** Google's apps only show one level. A
   `parent` that is itself a subtask gives `UNSUPPORTED_DEPTH`.
 - **Requests for impossible features fail loudly.** MCP ignores arguments a tool
@@ -122,7 +130,7 @@ API mapping, for reference:
 | `AMBIGUOUS` | More than one match. The text lists each with its id and due date. |
 | `NOT_ALLOWED` | Deleting the default list, or deleting an assigned task without `confirm`. |
 | `LIMIT_REACHED` | Google's 20k-per-list or 100k-total task limit. |
-| `CONFLICT` | 412 on an `If-Match` write, after one automatic retry. |
+| `CONFLICT` | Google answers 412. |
 | `RATE_LIMITED` | 429 or quota errors. |
 | `GOOGLE_ERROR` | Anything else: the HTTP status plus Google's message. |
 
@@ -151,7 +159,9 @@ API mapping, for reference:
 - To confirm against the real API during the build, since these are guesses for now:
   - deleting a parent deletes its subtasks;
   - subtasks follow a parent moved with `destinationTasklist`;
-  - the exact error Google returns for moving a repeating task to another list;
+  - the exact error Google returns for moving a repeating task to another list, and
+    for the task limits. For now both are recognised by words in Google's message
+    ("recurr"/"repeat", "limit");
   - binding `127.0.0.1` doesn't trigger a Windows Firewall prompt.
 
 ## Out of scope
@@ -171,7 +181,10 @@ API mapping, for reference:
   - `auth.go`: token file, pending-login goroutine, loopback listener, browser opener;
   - `resolve.go`: name and id lookup;
   - `format.go`: tree and text output;
+  - `errors.go`: the fixed error codes and the rejected-argument map;
   - `main_test.go`.
-- `Makefile`: pass `-ldflags "-X main.clientID=$(GOOGLE_TASKS_CLIENT_ID) -X main.clientSecret=$(GOOGLE_TASKS_CLIENT_SECRET)"` for this tool.
+- `build.sh`: source `local.env` if present, and pass
+  `-ldflags "-X main.clientID=… -X main.clientSecret=…"` for this tool.
+- `.gitignore`: `local.env`.
 - `README.md`: a tool entry, the one-time Google Cloud setup, and the networking
   exception. I'll propose the wording before applying it.

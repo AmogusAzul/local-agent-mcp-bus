@@ -70,18 +70,30 @@ to see why (see AGENTS.md, "Testing").
 
 ## Google OAuth client (one-time, for google-tasks)
 
-The user does this once in Google Cloud console; an agent can't:
+The user does this once in the Google Cloud console (about 10 minutes, no billing
+account needed). As far as we know, Google offers no command or API to create
+this kind of client, so an agent can't do it.
 
-1. Create a project, enable the **Google Tasks API**.
-2. OAuth consent screen: External, add the user as a test user, then **Publish
-   app** ("In production"). In Testing mode refresh tokens expire after 7 days.
-3. Credentials → Create OAuth client ID → **Desktop app**.
-4. Put its values in `local.env` at the repo root:
+1. console.cloud.google.com → create a project (e.g. `local-agent-mcp-bus`).
+2. **APIs & Services → Library → Google Tasks API → Enable.**
+3. **Google Auth Platform → Get started:** app name, support email, audience
+   **External**, contact email, accept.
+4. **Audience → Publish app** ("In production"), so the login doesn't expire. (In
+   Testing mode you add yourself as a test user instead, but refresh tokens expire
+   after 7 days and the browser login comes back weekly.)
+5. **Clients → Create client → Desktop app**. Copy the client ID and secret.
+6. Put them in `local.env` at the repo root (untracked; `build.sh` reads it):
 
    ```sh
    GOOGLE_TASKS_CLIENT_ID=...apps.googleusercontent.com
    GOOGLE_TASKS_CLIENT_SECRET=...
    ```
 
-5. Reinstall (steps 2–4). The first `tasks_*` call opens the Google login in the
-   browser; the token is saved to `%APPDATA%\local-agent-mcp-bus\google-tasks.json`.
+7. Reinstall (steps 2–4). The first `tasks_*` call opens the Google login in the
+   browser. On "Google hasn't verified this app" click **Advanced → Go to …
+   (unsafe) → Allow** (once). The token is saved to
+   `%APPDATA%\local-agent-mcp-bus\google-tasks.json`; delete that file to log in
+   again or switch accounts.
+
+Limits: free, 50,000 requests/day per project. An unverified app is capped at 100
+users, which is fine for personal use.

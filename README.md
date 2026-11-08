@@ -1,6 +1,6 @@
 # local-agent-mcp-bus
 
-Small, compiled stdio MCP servers that let Claude Desktop (or any MCP client) drive local automation in WSL — Claude Desktop plans, cheap local binaries act. No runtime dependencies, no networking, narrow tools for low token overhead.
+Small, compiled stdio MCP servers that let Claude Desktop (or any MCP client) drive local automation in WSL — Claude Desktop plans, cheap local binaries act. No runtime dependencies, local by default (`google-tasks` and `overleaf` use the network), narrow tools for low token overhead.
 
 ## Layout
 
@@ -14,6 +14,7 @@ Small, compiled stdio MCP servers that let Claude Desktop (or any MCP client) dr
 - `run-wsl-command` — runs a bash `command` in WSL and returns its output; killed after `timeout_seconds` (default 60).
 - `launch-zed` — opens `project` in Zed (Windows app, WSL remote) as a tab of an existing WSL window, creating the directory if missing, and pre-fills an optional `task` in a new Agent Panel thread via `zed://agent?prompt=`. Zed never auto-sends it: the user reviews and presses Enter. Needs `zed` (Zed's CLI) on the Windows `PATH`. An optional `file` (relative, no `:line`, which Zed 1.25.3 mangles for WSL) is opened inside the project. Takes ~3–5 s; without `file` or `task` it only opens the project. See `spec/launch-zed.md`.
 - `agent-status` — reports the latest Claude or Codex turn in `project` (from Zed or `launch-claude-code`): agent, `done`/`running`, the prompt and the final reply, truncated. `wait_seconds` (max 50) waits for the next turn to finish.
+- `overleaf` — creates, edits and compiles Overleaf projects (free plan) through the web app's own endpoints, with the session cookie from the browser (`overleaf_login`). Files are edited in a local copy under `%TEMP%\lamb-overleaf\` and pushed; compiling happens on Overleaf. This goes against Overleaf's terms, so use it at your own risk. See `spec/overleaf.md`.
 
 `launch-claude-code` and `run-wsl-command` run `bash -lc`, so your login `PATH` (e.g. `~/.local/bin`) applies.
 

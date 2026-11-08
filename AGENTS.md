@@ -12,8 +12,8 @@ and the cheap local binaries act. Design values:
 - **Token economy:** narrow, well-named tools, short descriptions, compact text
   output (not raw JSON), truncated long fields.
 - **No runtime dependencies:** a single `.exe` per tool.
-- **Local only:** `google-tasks` is the one exception that uses the network
-  (HTTPS to Google).
+- **Local only:** `google-tasks` (HTTPS to Google) and `overleaf` (overleaf.com)
+  are the exceptions that use the network.
 
 ## Layout
 
@@ -24,7 +24,8 @@ and the cheap local binaries act. Design values:
     are `"true"`/`"false"`.
   - `Reject` maps argument names the tool doesn't declare to an error, so requests
     for unsupported features fail loudly.
-  - An error from `Execute` becomes an MCP tool error (`isError`).
+  - An error from `Execute` becomes an MCP tool error (`isError`). Tools that
+    return images or files set `Run` instead, returning `core.Result{Text, Blobs}`.
   - `core.RunCommand` runs a process and returns its combined output.
 - `tools/<name>/`: one independent Go module per tool, with
   `replace github.com/AmogusAzul/local-agent-mcp-bus/core => ../../core`.
@@ -35,6 +36,9 @@ and the cheap local binaries act. Design values:
   - `agent-status`: reads back the latest Claude/Codex turn from transcripts.
   - `google-tasks`: seven `tasks_*` tools over the Google Tasks API, with a
     browser OAuth login the server starts on its own.
+  - `overleaf`: twelve `overleaf_*` tools over Overleaf's web endpoints (free
+    plan, browser session cookie), with a local copy per project under
+    `%TEMP%\lamb-overleaf\` and compiling on Overleaf.
 - `spec/`: one short spec per change, agreed before building. Read the relevant
   one before touching a tool. They record findings and decisions the code doesn't
   explain.

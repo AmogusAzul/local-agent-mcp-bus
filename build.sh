@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Cross-compiles every tool under tools/ into bin/<tool>.exe for Windows.
+# -trimpath and -buildvcs=false keep a tool's binary identical across builds
+# when its code is unchanged, so `make install` can leave it untouched.
 # google-tasks gets its OAuth client from GOOGLE_TASKS_CLIENT_ID and
 # GOOGLE_TASKS_CLIENT_SECRET, taken from the environment or from local.env.
 # brightspace takes an optional BRIGHTSPACE_URL (the school's site) the same way.
@@ -18,5 +20,5 @@ for dir in tools/*/; do
 	if [ "$name" = brightspace ] && [ -n "${BRIGHTSPACE_URL:-}" ]; then
 		ldflags="-X main.siteURL=${BRIGHTSPACE_URL}"
 	fi
-	(cd "$dir" && GOOS=windows GOARCH=amd64 go build -ldflags "$ldflags" -o "../../bin/$name.exe" .)
+	(cd "$dir" && GOOS=windows GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags "$ldflags" -o "../../bin/$name.exe" .)
 done

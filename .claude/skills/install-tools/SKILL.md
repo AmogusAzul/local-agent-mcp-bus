@@ -35,6 +35,9 @@ make install
 This builds `bin/*.exe` (`build.sh`), copies them to `C:\Users\<win user>\tools`
 and registers each tool in `claude_desktop_config.json`
 (`register-claude-desktop.sh`, which finds `%LOCALAPPDATA%\Claude-Data\claude_*`).
+Builds are reproducible (`-trimpath -buildvcs=false`) and the copy skips an `.exe`
+that is byte-identical to the installed one, so tools you didn't change keep the
+same file (and Claude Desktop's per-tool approvals, if it ties them to the file).
 `cp` fails (permission denied) if any tool `.exe` is still running. If so, stop those processes (step 2 with their names) and rerun.
 
 Check the registration:

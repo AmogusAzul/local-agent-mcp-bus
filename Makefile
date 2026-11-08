@@ -8,5 +8,5 @@ build-windows:
 
 install: build-windows
 	mkdir -p $(INSTALL_DIR)
-	cp bin/*.exe $(INSTALL_DIR)/
+	for f in bin/*.exe; do cmp -s $$f $(INSTALL_DIR)/$$(basename $$f) || cp $$f $(INSTALL_DIR)/; done
 	./register-claude-desktop.sh $(INSTALL_DIR)

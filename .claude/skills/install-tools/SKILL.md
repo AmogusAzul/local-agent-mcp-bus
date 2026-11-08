@@ -15,10 +15,6 @@ from the repo root in WSL.
 - For `google-tasks`: `local.env` at the repo root (untracked) defines
   `GOOGLE_TASKS_CLIENT_ID` and `GOOGLE_TASKS_CLIENT_SECRET`. Without it the build
   warns and the tool answers `NOT_CONFIGURED`. See "Google OAuth client" below.
-- For `brightspace` (`external/brightspace.json`): the user must have done the one-time
-  login in "Brightspace login" below. Without it the server starts but every call
-  answers that no one is signed in. Never run that step yourself: it takes the
-  user's Uniandes password and MFA approval.
 - Closing Claude Desktop ends the user's open chats' tool servers. Tell the user
   before doing it unless they already asked for the reinstall.
 
@@ -68,36 +64,9 @@ Then check a tool's log for `initialize` and `tools/list` without errors:
 tail -n 20 /mnt/c/Users/<win user>/AppData/Local/Claude/logs/mcp-server-<tool>.log
 ```
 
-`brightspace` is a Node process, not an `.exe` under `tools`, so it won't appear in that
-list; check `mcp-server-brightspace.log` instead. (The first call may be slow while npx
-unpacks the package.)
-
 A tool missing from the process list, or an error in its log, means it crashed on
 start. Run its `.exe` from WSL with a JSON-RPC `initialize` + `tools/list` on stdin
 to see why (see AGENTS.md, "Testing").
-
-## Brightspace login (one-time, the user runs it)
-
-`brightspace` is upstream's `brightspace-mcp-server`, pinned in
-`external/brightspace.json` (see `spec/brightspace.md`). Its login takes the user's
-Uniandes password and MFA approval, so only the user does it, in a **Windows**
-terminal (PowerShell), with the same version as the pin:
-
-```powershell
-npx -y brightspace-mcp-server@5.1.41 setup --url https://bloqueneon.uniandes.edu.co
-```
-
-- Answer **no** to every "connect to <app>" question. Upstream would register an
-  unpinned `@latest` entry; our `make install` registers the pinned one.
-- Pick the Microsoft/phone-approval options when asked. If the sign-in page isn't
-  recognized, choose the option that opens the page so the user finishes it by hand.
-- Then `npx -y brightspace-mcp-server@5.1.41 doctor` should pass.
-- To bump the version, edit the pin in `external/brightspace.json` and here, rerun
-  `make install`, and rerun the `setup` line so the new version's browser and cache
-  are ready.
-- The password lives in Windows Credential Manager and the session under
-  `%USERPROFILE%\.d2l-session`. `npx -y brightspace-mcp-server@5.1.41 auth --logout`
-  clears the session.
 
 ## Google OAuth client (one-time, for google-tasks)
 

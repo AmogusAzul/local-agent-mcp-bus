@@ -1,9 +1,0 @@
-{
-  "command": "cmd",
-  "args": ["/c", "npx", "-y", "brightspace-mcp-server@5.1.41"],
-  "env": {
-    "D2L_BASE_URL": "https://bloqueneon.uniandes.edu.co",
-    "D2L_NO_UPDATE_CHECK": "1",
-    "D2L_CURRENT_ONLY": "true"
-  }
-}

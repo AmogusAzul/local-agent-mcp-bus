@@ -57,14 +57,18 @@ the errors. Findings (2026-11-04 research, checked live 2026-11-07):
     `force="true"`. It removes mirrored files that are gone remotely.
   - `push` uploads changed and new files (all, or the ones in `paths`). First it
     downloads the zip: if any of them changed remotely since the last pull, it stops
-    with `REMOTE_CHANGED`, unless `force="true"`. Missing folders are created.
+    with `REMOTE_CHANGED`, unless `force="true"`, and saves Overleaf's versions in
+    `.overleaf-output/remote/<path>` so the agent can read and merge them. Missing
+    folders are created.
     Local deletions aren't propagated; `overleaf_delete_file` deletes on both sides.
   - Paths are relative, `/`-separated, and can't leave the mirror or touch
     `.overleaf*`.
 - **Compile remotely** on Overleaf (what the user sees there). It compiles what's on
   Overleaf, so it warns when the mirror has unpushed changes. It returns the status,
-  the first 10 errors as `file:line: message` (or `! message` when the log has no
-  line), the PDF's Windows path and the project link. The PDF and log are saved in
+  the first 10 errors as `file:line: message`, a warning count, the PDF's Windows
+  path and the project link. Overleaf doesn't use `-file-line-error`, so the file
+  comes from TeX's `(file … )` nesting in the log and the line from `l.N`; without
+  them an error shows as `! message`. The PDF and log are saved in
   `<mirror>\.overleaf-output\`. `open="true"` opens the PDF in the default Windows
   viewer; `attach="true"` returns it in the result as an embedded
   `application/pdf` resource, for the Desktop chat.

@@ -38,7 +38,24 @@ account signed in.
 - **Not established:** whether that first login came from the Windows work account
   (a device-bound token) or from the persistent cookie alone. That decides what happens
   on a PC without the work account (see Open questions).
-- API versions can be discovered at `/d2l/api/versions/` instead of being hard-coded.
+- API versions can be discovered at `/d2l/api/versions/` instead of being hard-coded
+  (Bloque Neón answers `lp` 1.64 and `le` 1.100).
+- **The browser's `localStorage` XSRF token can be the previous session's.** On a reused
+  profile it is stale at the moment the home page loads, and the mint answers 403. The
+  home page's HTML always carries the current one.
+- **Endpoints confirmed against the real site (read-only):**
+  - `lp/{v}/enrollments/myenrollments/`: `OrgUnit` (`Id`, `Type.Code` "Course Offering",
+    `Name`, `Code`) and `Access` (`IsActive`, `CanAccess`, `StartDate`, `EndDate`,
+    `LastAccessed`). Many old courses stay active, and some have no end date.
+  - `le/{v}/{org}/dropbox/folders/`: `Id`, `Name`, `DueDate`, `Availability`,
+    `SubmissionType` (0 file, 1 text, 2 file or text, 3 observed), `AllowableFileType`,
+    `CustomAllowableFileTypes`, `SubmissionsRule`. It carries no attempt limit.
+  - `.../dropbox/folders/{id}/submissions/mysubmissions/`: a list of
+    `{Entity, Status, Feedback, Submissions: [...]}`, not a flat list of submissions.
+  - `le/{v}/{org}/grades/values/myGradeValues/`, `.../news/`, `.../quizzes/`
+    (`{Objects, Next}`), `.../content/toc`, and
+    `.../content/topics/{id}/file?stream=true` (with `Content-Disposition`).
+  - Many assignments take online text (a repository link, for example), not files.
 
 ## Alternatives considered
 
@@ -57,7 +74,8 @@ account signed in.
 
 ## Decisions
 
-- **A Go tool `brightspace`, one `.exe`, no Node.** Same shape as `overleaf`: narrow
+- **A Go tool `brightspace`, one `.exe`, no Node, no dependencies beyond `core`.** The
+  DevTools WebSocket client is a small standard-library implementation (`ws.go`). Same shape as `overleaf`: narrow
   tools, compact text output, truncated long fields, dates as `Mon 12 Nov 14:00` in the
   local zone, HTML stripped.
 - **A browser performs the login; the tool never sees credentials.**
@@ -94,21 +112,23 @@ account signed in.
 - **Reads and one write, with a confirmation step.** Stage 1 reads courses, due items,
   grades, announcements and content, downloads files, and submits assignment files.
   Everything else is a later stage (below).
-- **Submitting is two steps.** `brightspace_submit` without `confirm` only previews:
-  nothing is sent. With `confirm="true"` it uploads. The tool description tells the
-  model to show the preview to the user and wait for approval first. The preview and
-  the checks below exist because a submission should be treated as irreversible: the
-  student API doesn't offer a way to retract one.
-  - The preview shows the course, the assignment folder, its due and end dates,
-    attempts used and allowed, accepted file types and size limit, and each local file
-    with its size.
-  - It refuses, with a reason, when the folder is closed, no attempts remain, a file is
-    missing, over the size limit or of a type the folder rejects, or the folder
-    doesn't take file submissions.
+- **Submitting is two steps.** `brightspace_submit` without `confirm="true"` only
+  previews: nothing is sent. With it, the tool uploads. The tool description tells the
+  model to show the preview to the user and wait for approval first. A submission is
+  treated as irreversible: the student API doesn't offer a way to retract one.
+  - It takes files, online text, or both. The `text` argument is the submission text for
+    a text folder and a comment for a file folder.
+  - The preview shows the course, the assignment folder, its due and closing dates, how
+    many submissions exist, the text, and each local file with its size.
+  - It refuses, with a reason, when the folder isn't open yet or is closed, is an
+    in-person assignment, takes only text but got files (or only files but got text),
+    or a file is missing, empty, not a regular file, or not among the folder's custom
+    allowed types. The API doesn't tell students an attempt limit, a size limit or the
+    type categories, so the site enforces those, and its message is passed on.
   - It reads only the paths it is given, never a directory, and never reads its own
     cache or profile.
-  - After uploading it reads the folder's submissions back and reports the submission
-    id, time and files, so the result is confirmed from the server.
+  - After uploading it reads the submissions back and reports the submission id, time
+    and files, so the result is confirmed from the server.
 - **Bulk downloads are a background job.** `brightspace_sync` mirrors a course's files
   (or a module's) into a local directory. Large courses take longer than the MCP
   timeout, so it uses the same pattern as the login:
@@ -124,23 +144,25 @@ account signed in.
     a file listing. The manifest holds the full detail.
   - The destination is resolved on the machine the server runs on. A UNC path such as
     `\\wsl.localhost\<distro>\...` reaches a WSL directory.
+- **Current courses.** The enrollment list holds every course the user ever had.
+  A course is current when it is active, accessible, has started and has not ended.
+  Without an end date it is current only if it was opened in the last 120 days (or
+  never).
+- **The XSRF token comes from the home page's HTML**, fetched with the saved cookies,
+  not from the browser.
 - **API versions** are discovered once per session from `/d2l/api/versions/` and cached.
 - **Errors** follow `google-tasks`: `CODE: message. Hint: ...` with the codes
   `LOGIN_PENDING` ("The login window is open. This request can't run until you sign in
-  there. Hint: sign in, then retry."), `LOGIN_BROWSER` (the window couldn't open; the
-  login stays pending), `BROWSER_NOT_FOUND`, `NOT_FOUND`, `CLOSED`, `NO_ATTEMPTS`,
-  `FILE_REJECTED`, `API_ERROR`.
+  there. Hint: sign in, then retry."), `LOGIN_CLOSED` (the window was closed first),
+  `LOGIN_BROWSER` (the browser couldn't start), `BROWSER_NOT_FOUND`, `NOT_FOUND`,
+  `INVALID_ARG`, `CLOSED`, `FILE_REJECTED`, `UNSUPPORTED_FOLDER`, `API_ERROR`.
 - **Portable and shareable.** The only site-specific piece is the school URL, injected
   at build time like Google's client: `BRIGHTSPACE_URL`, from the environment or the
   untracked `local.env`, through `-ldflags -X`. It defaults to
   `https://bloqueneon.uniandes.edu.co`. Another school with the same Entra and D2L setup
-  works by rebuilding. Browser discovery and launch are behind `_windows.go` and
-  `_other.go` files, so nothing in the design is Windows-only. The first target is the
-  Windows `.exe`.
-- **Remove the earlier approach.** Delete `external/brightspace.json`, the
-  `external/*.json` merge in `register-claude-desktop.sh`, the Brightspace section of
-  the `install-tools` skill and the matching line in `spec/claude-desktop-config.md`.
-  Nothing else uses `external/*.json`.
+  works by rebuilding. Browser discovery switches on `runtime.GOOS` (Windows, macOS and
+  Linux paths), and `BRIGHTSPACE_BROWSER` overrides it, so nothing in the design is
+  Windows-only. The first target is the Windows `.exe`.
 
 ## Interface
 
@@ -153,15 +175,16 @@ account signed in.
 | `brightspace_content` | A course's module and topic tree, or one topic's text. | `course` (req), `topic` |
 | `brightspace_download` | Saves one course file locally and returns the path. | `course`, `topic` (req), `dest` |
 | `brightspace_sync` | Mirrors a course's files into a directory as a background job. | `course` (req), `dest`, `module`, `types`, `max_mb`, `job` |
-| `brightspace_submit` | Previews, or with `confirm="true"` submits, files to an assignment folder. | `course`, `assignment`, `files` (req), `comment`, `confirm` |
+| `brightspace_submit` | Previews, or with `confirm="true"` submits, files and/or text to an assignment folder. | `course`, `assignment` (req), `files`, `text`, `confirm` |
 
-- `course` and `assignment` accept an id or a name fragment. `files` and `types` are
+- `course` and `assignment` accept an id or a name fragment; `course` is optional on the read tools (default: all current courses). `files` and `types` are
   comma-separated. Arguments are strings; booleans are `"true"` or `"false"`.
 - `brightspace_sync` with `job` set ignores the other arguments and reports that job.
-- The Valence endpoints (for example `enrollments/myenrollments`, `dueItems`,
-  `grades/values/myGradeValues`, `news`, `content/root`, `dropbox/folders` and
-  `dropbox/folders/{id}/submissions/mysubmissions/`) and their exact versions and
-  response shapes are fixed during implementation and recorded here.
+- `brightspace_due` combines assignment folders and quizzes with a due date in the
+  window, hidden folders excluded, and marks each assignment `submitted N×` or `not
+  submitted`. A course that fails is named at the end of the reply and skipped.
+- `brightspace_sync` keeps the manifest keyed by topic id and the topic's last-modified
+  time, so an unchanged file is skipped without being downloaded.
 
 ## Check
 
@@ -182,7 +205,7 @@ account signed in.
 - Deleting only the `d2l*` entries from the cache: the next call recovers by itself.
 - After the real 3-hour expiry a call succeeds without user action.
 - After one visible login, a later call on the same profile is headless and silent.
-- `tools/list` is under 4 KB and a typical `brightspace_due` reply under 1 KB.
+- `tools/list` is about 4 KB and a typical `brightspace_due` reply under 1 KB.
 - No password, cookie or token value appears in logs, errors or stdout.
 - The user's own browser profile and cookies are never opened or modified.
 - `submit` against an assignment folder where extra attempts are harmless: the preview
@@ -236,25 +259,24 @@ Saved for later, not part of stage 1.
   Access allows that can only be tested on such a PC or in a profile with no Windows
   single sign-on. If it doesn't, that PC logs in again whenever the cookie lapses,
   like any browser.
-- **Submission folder variants.** Folders can require online text instead of a file,
-  or have no attempt limit. Stage 1 handles file submissions only, and the preview
-  reports other folder types as unsupported. Does text submission need to join stage 1?
+- **The upload itself.** The multipart/mixed request for `mysubmissions` follows the
+  Valence documentation and is covered by unit tests, but has not been exercised against
+  the live site. The first real submission, to a folder where extra attempts are
+  harmless, is the test. Whether several files in one request become one submission is
+  part of it.
+- **The real 3-hour expiry.** Tokens and cookies were re-minted and recovered after
+  being corrupted, but the site's own expiry hasn't been waited out yet.
 
 ## Implementation plan
 
 - `tools/brightspace/`:
-  - `main.go`: the tools.
+  - `main.go`: the tools and the site URL.
   - `session.go`: cache, token mint, retry, pending login.
-  - `browser_windows.go` and `browser_other.go`: find a Chromium, start it, read cookies
-    over CDP.
-  - `api.go`: versions, calls, parsing.
-  - `submit.go`: the preview and the multipart upload.
-  - `sync.go`: the background job and the manifest.
-  - `format.go`: compact text.
-  - Tests for each.
-  - `go.mod` with the usual `replace` and Go 1.25. The only extra dependency is a
-    WebSocket client for CDP (`github.com/coder/websocket`), or the standard library
-    if that stays small enough.
-- Remove the earlier approach (see Decisions).
+  - `browser.go` and `ws.go`: find a Chromium, start it, read cookies over CDP with a
+    small WebSocket client.
+  - `api.go`: versions, requests, courses.
+  - `tools.go`, `content.go`, `sync.go`, `submit.go`: the tools.
+  - `format.go`, `errors.go`, and `main_test.go`.
+  - `go.mod` with the usual `replace` and Go 1.25; no other dependency.
 - `build.sh`: inject `BRIGHTSPACE_URL`, with the default.
 - README: add a tool entry.

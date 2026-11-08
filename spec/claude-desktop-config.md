@@ -11,6 +11,7 @@
   - `jq` is installed and makes the edit a single expression.
   - Python (standard library only) remains the fallback if `jq` turns out to be a problem.
 - **Idempotent upsert.** For each `tools/<name>/` the script sets `mcpServers[<name>] = {command: "<win install dir>\\<name>.exe"}`. Other servers and other top-level keys are left untouched. Running it again doesn't change the file.
+- **Non-Go servers.** Each `external/<name>.json` holds one `mcpServers` entry as is (no secrets) and is upserted under `<name>`, after the Go tools. See `spec/brightspace.md`.
 - **Config location.**
   - Checked on this machine: Claude Desktop is the Microsoft Store (MSIX) build, and it keeps its user data outside the package, in `%LOCALAPPDATA%\Claude-Data\claude_<id>\`. That directory's README says so, and its `claude_desktop_config.json` holds the live preferences.
   - A config written to the old redirected path (`Packages\Claude_*\LocalCache\Roaming\Claude`) is ignored; that folder has a `.user-data-left…` marker.

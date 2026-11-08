@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Adds (or refreshes) one mcpServers entry per tool in Claude Desktop's config.
+# Adds (or refreshes) one mcpServers entry per tool in Claude Desktop's config:
+# {command: <install-dir>\<name>.exe} for each tools/<name>/, and the entry held in
+# each external/<name>.json (non-Go servers) as is.
 # Usage: register-claude-desktop.sh <install-dir> [config-file]
 # Idempotent: entries are keyed by tool name. Requires jq.
 set -euo pipefail
@@ -24,6 +26,11 @@ for dir in tools/*/; do
 	name=$(basename "$dir")
 	json=$(jq --arg name "$name" --arg cmd "$win_dir\\$name.exe" \
 		'.mcpServers[$name] = {command: $cmd}' <<<"$json")
+done
+for file in external/*.json; do
+	[ -e "$file" ] || continue
+	json=$(jq --arg name "$(basename "$file" .json)" --slurpfile entry "$file" \
+		'.mcpServers[$name] = $entry[0]' <<<"$json")
 done
 tmp=$(mktemp "$config.XXXXXX")
 printf '%s\n' "$json" > "$tmp"

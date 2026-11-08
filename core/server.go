@@ -4,10 +4,12 @@ package core
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"log"
 	"os"
 	"os/exec"
+	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -29,6 +31,22 @@ type Tool struct {
 	// gets, so a request for an unsupported feature fails instead of being dropped.
 	Reject  map[string]string
 	Execute func(ctx context.Context, args map[string]string) (string, error)
+	// Run replaces Execute for tools that also return binary content.
+	Run func(ctx context.Context, args map[string]string) (Result, error)
+}
+
+// Result is text plus optional binary content.
+type Result struct {
+	Text  string
+	Blobs []Blob
+}
+
+// Blob is binary content. Images are sent as image content, anything else as an
+// embedded resource.
+type Blob struct {
+	URI      string
+	MIMEType string
+	Data     []byte
 }
 
 // Serve registers the tools and serves MCP over stdio until stdin closes.
@@ -72,12 +90,34 @@ func handler(t Tool) server.ToolHandlerFunc {
 			}
 			args[a.Name] = v
 		}
-		out, err := t.Execute(ctx, args)
+		if t.Run == nil {
+			out, err := t.Execute(ctx, args)
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+			return mcp.NewToolResultText(out), nil
+		}
+		res, err := t.Run(ctx, args)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-		return mcp.NewToolResultText(out), nil
+		return toResult(res), nil
 	}
+}
+
+func toResult(r Result) *mcp.CallToolResult {
+	out := mcp.NewToolResultText(r.Text)
+	for _, b := range r.Blobs {
+		data := base64.StdEncoding.EncodeToString(b.Data)
+		if strings.HasPrefix(b.MIMEType, "image/") {
+			out.Content = append(out.Content, mcp.NewImageContent(data, b.MIMEType))
+			continue
+		}
+		out.Content = append(out.Content, mcp.NewEmbeddedResource(mcp.BlobResourceContents{
+			URI: b.URI, MIMEType: b.MIMEType, Blob: data,
+		}))
+	}
+	return out
 }
 
 // RunCommand runs a process and returns its combined output. A non-zero exit

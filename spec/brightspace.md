@@ -56,6 +56,17 @@ account signed in.
     (`{Objects, Next}`), `.../content/toc`, and
     `.../content/topics/{id}/file?stream=true` (with `Content-Disposition`).
   - Many assignments take online text (a repository link, for example), not files.
+  - The folder itself (`dropbox/folders/{id}`) carries `CustomInstructions`,
+    `Attachments` (`FileId`, `FileName`, `Size`) and `Assessment.Rubrics` (criteria
+    groups with levels and a description and points per cell).
+  - Each `mysubmissions` entry has `Feedback`: `Score`, `Feedback.Text`, `Files`,
+    `Links` and `RubricAssessments` (a level, score and comment per criterion), and
+    `Submissions[]` with `Comment` (the submitted text) and `Files`.
+  - **For a group assignment `mysubmissions` returns every group's entry.** The tool
+    keeps only the user's own entry, found through the user's id (`lp/{v}/users/whoami`)
+    and the folder's group category (`lp/{v}/{org}/groupcategories/{id}/groups/`). If it
+    can't tell which group is the user's, it shows none rather than someone else's.
+  - Grade values carry `Comments` (the instructor's comment) next to the grade.
 
 ## Alternatives considered
 
@@ -110,7 +121,8 @@ account signed in.
   On a 401, or with an empty cache, the browser login runs again (about 5 s) and the
   call is retried once.
 - **Reads and one write, with a confirmation step.** Stage 1 reads courses, due items,
-  grades, announcements and content, downloads files, and submits assignment files.
+  grades, announcements, content and assignments (instructions, rubric, what the user
+  submitted, grade and feedback), downloads files, and submits assignment files or text.
   Everything else is a later stage (below).
 - **Submitting is two steps.** `brightspace_submit` without `confirm="true"` only
   previews: nothing is sent. With it, the tool uploads. The tool description tells the
@@ -173,13 +185,19 @@ account signed in.
 | `brightspace_grades` | Grades for one course, or a one-line summary per course. | `course` |
 | `brightspace_announcements` | Recent announcements, text only. | `course`, `days` (default 14) |
 | `brightspace_content` | A course's module and topic tree, or one topic's text. | `course` (req), `topic` |
-| `brightspace_download` | Saves one course file locally and returns the path. | `course`, `topic` (req), `dest` |
+| `brightspace_assignment` | One assignment: instructions, instructor files, rubric, the user's submissions, grade and feedback with the rubric result. | `course`, `assignment` (req) |
+| `brightspace_download` | Saves one file locally and returns the path: a content file (`topic`) or an assignment's instructor, submitted or feedback file (`assignment` and `file`). | `course` (req), `topic`, `assignment`, `file`, `dest` |
 | `brightspace_sync` | Mirrors a course's files into a directory as a background job. | `course` (req), `dest`, `module`, `types`, `max_mb`, `job` |
 | `brightspace_submit` | Previews, or with `confirm="true"` submits, files and/or text to an assignment folder. | `course`, `assignment` (req), `files`, `text`, `confirm` |
 
 - `course` and `assignment` accept an id or a name fragment; `course` is optional on the read tools (default: all current courses). `files` and `types` are
   comma-separated. Arguments are strings; booleans are `"true"` or `"false"`.
 - `brightspace_sync` with `job` set ignores the other arguments and reports that job.
+- `brightspace_assignment` lists every file with its id; `file` in `brightspace_download`
+  takes that id or a name fragment. Rubrics print one line per criterion with its levels
+  (`Alto 10: description`), and the user's result next to them. Text is plain, long
+  fields are truncated, and group assignments show only the user's group.
+- `brightspace_grades` for one course adds the instructor's comment to each grade.
 - `brightspace_due` combines assignment folders and quizzes with a due date in the
   window, hidden folders excluded, and marks each assignment `submitted N×` or `not
   submitted`. A course that fails is named at the end of the reply and skipped.

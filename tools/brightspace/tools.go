@@ -20,6 +20,7 @@ type folder struct {
 	// AllowableFileType is 0 for any file; CustomAllowableFileTypes lists extensions.
 	AllowableFileType        int
 	CustomAllowableFileTypes string
+	GroupTypeID              *int64 `json:"GroupTypeId"`
 	Availability             *struct {
 		StartDate string
 		EndDate   string
@@ -38,32 +39,165 @@ func (a *api) folders(ctx context.Context, org int64) ([]folder, error) {
 	return fs, nil
 }
 
+// fileRef is a file the API lists: an attachment, a submitted file or a feedback file.
+type fileRef struct {
+	FileID   int64 `json:"FileId"`
+	FileName string
+	Size     int64
+}
+
 // submission is one of the user's own submissions to a folder.
 type submission struct {
 	ID             int64 `json:"Id"`
 	SubmissionDate string
 	Comment        struct{ Text string }
-	Files          []struct {
-		FileName string
-		Size     int64
+	Files          []fileRef
+}
+
+type rubricAssessment struct {
+	RubricID        int64 `json:"RubricId"`
+	OverallScore    *float64
+	OverallFeedback struct{ Text string }
+	OverallLevel    struct {
+		LevelID int64 `json:"LevelId"`
+	}
+	CriteriaOutcome []struct {
+		CriterionID int64 `json:"CriterionId"`
+		LevelID     int64 `json:"LevelId"`
+		Score       *float64
+		Feedback    struct{ Text string }
 	}
 }
 
-// mySubmissions lists the user's own submissions to a folder, oldest first.
-func (a *api) mySubmissions(ctx context.Context, org, folderID int64) ([]submission, error) {
-	path, err := a.lePath(ctx, fmt.Sprintf("/%d/dropbox/folders/%d/submissions/mysubmissions/", org, folderID))
+type feedback struct {
+	Score             *float64
+	Feedback          *struct{ Text, Html string }
+	Files             []fileRef
+	IsGraded          bool
+	RubricAssessments []rubricAssessment
+}
+
+// entry is the status of one user or group in a folder.
+type entry struct {
+	Entity struct {
+		EntityID   int64 `json:"EntityId"`
+		EntityType string
+	}
+	Status      int
+	Feedback    *feedback
+	Submissions []submission
+	NoGroup     bool `json:"-"` // a group folder in which the user has no group
+}
+
+// userID is the signed-in user's id.
+func (a *api) userID(ctx context.Context) (int64, error) {
+	a.mu.Lock()
+	id := a.uid
+	a.mu.Unlock()
+	if id != 0 {
+		return id, nil
+	}
+	path, err := a.lpPath(ctx, "/users/whoami")
+	if err != nil {
+		return 0, err
+	}
+	var w struct{ Identifier string }
+	if err := a.getJSON(ctx, path, &w); err != nil {
+		return 0, err
+	}
+	id, err = strconv.ParseInt(w.Identifier, 10, 64)
+	if err != nil {
+		return 0, fail("API_ERROR", "", "The site gave no user id")
+	}
+	a.mu.Lock()
+	a.uid = id
+	a.mu.Unlock()
+	return id, nil
+}
+
+// myGroups are the ids of the user's groups in a group category.
+func (a *api) myGroups(ctx context.Context, org, category int64) (map[int64]bool, error) {
+	uid, err := a.userID(ctx)
 	if err != nil {
 		return nil, err
 	}
-	var st []struct{ Submissions []submission }
-	if err := a.getJSON(ctx, path, &st); err != nil {
+	path, err := a.lpPath(ctx, fmt.Sprintf("/%d/groupcategories/%d/groups/", org, category))
+	if err != nil {
 		return nil, err
 	}
-	var out []submission
-	for _, e := range st {
-		out = append(out, e.Submissions...)
+	var gs []struct {
+		GroupID     int64 `json:"GroupId"`
+		Enrollments []int64
 	}
-	return out, nil
+	if err := a.getJSON(ctx, path, &gs); err != nil {
+		return nil, err
+	}
+	mine := map[int64]bool{}
+	for _, g := range gs {
+		for _, u := range g.Enrollments {
+			if u == uid {
+				mine[g.GroupID] = true
+			}
+		}
+	}
+	return mine, nil
+}
+
+// myEntry returns the user's own entry in a folder. For a group folder the
+// site lists every group, so only the user's group is kept. known=false means
+// the user's group couldn't be found, and nothing is returned.
+func (a *api) myEntry(ctx context.Context, org int64, f folder) (e *entry, known bool, err error) {
+	path, err := a.lePath(ctx, fmt.Sprintf("/%d/dropbox/folders/%d/submissions/mysubmissions/", org, f.ID))
+	if err != nil {
+		return nil, false, err
+	}
+	var all []entry
+	if err := a.getJSON(ctx, path, &all); err != nil {
+		return nil, false, err
+	}
+	uid, err := a.userID(ctx)
+	if err != nil {
+		return nil, false, err
+	}
+	var groups map[int64]bool
+	for i := range all {
+		en := &all[i]
+		switch strings.ToLower(en.Entity.EntityType) {
+		case "user":
+			if en.Entity.EntityID == uid {
+				return en, true, nil
+			}
+		case "group":
+			if groups == nil {
+				if f.GroupTypeID == nil {
+					return nil, false, nil
+				}
+				if groups, err = a.myGroups(ctx, org, *f.GroupTypeID); err != nil {
+					return nil, false, nil
+				}
+			}
+			if groups[en.Entity.EntityID] {
+				return en, true, nil
+			}
+		}
+	}
+	// No entry at all (nothing submitted yet) is a known, empty state.
+	if len(all) == 0 {
+		return &entry{}, true, nil
+	}
+	if groups != nil || f.GroupTypeID == nil {
+		return &entry{NoGroup: groups != nil}, groups != nil, nil
+	}
+	return nil, false, nil
+}
+
+// mySubmissions lists the user's own submissions to a folder, oldest first.
+func (a *api) mySubmissions(ctx context.Context, org int64, f folder) ([]submission, error) {
+	e, _, err := a.myEntry(ctx, org, f)
+	if err != nil || e == nil {
+		return nil, err
+	}
+	return e.Submissions, nil
 }
 
 // eachCourse runs fn for every course, a few at a time, in order.
@@ -149,7 +283,7 @@ func (a *api) toolDue(ctx context.Context, args map[string]string) (string, erro
 				continue
 			}
 			it := dueItem{at: due, course: c.Code, name: f.Name, kind: "assignment"}
-			if ss, err := a.mySubmissions(ctx, c.ID, f.ID); err == nil {
+			if ss, err := a.mySubmissions(ctx, c.ID, f); err == nil {
 				if len(ss) > 0 {
 					it.note = fmt.Sprintf("submitted %d×", len(ss))
 				} else {
@@ -211,6 +345,7 @@ type gradeValue struct {
 	WeightedNumerator   *float64
 	WeightedDenominator *float64
 	GradeObjectTypeName string
+	Comments            struct{ Text string }
 }
 
 func (a *api) grades(ctx context.Context, org int64) ([]gradeValue, error) {
@@ -277,7 +412,11 @@ func (a *api) toolGrades(ctx context.Context, args map[string]string) (string, e
 					b.WriteString("…\n")
 					break
 				}
-				b.WriteString("  " + g.line() + "\n")
+				b.WriteString("  " + g.line())
+				if c := strings.TrimSpace(g.Comments.Text); c != "" {
+					b.WriteString(" | comment: " + trunc(c, 300))
+				}
+				b.WriteString("\n")
 				shown++
 			}
 			if shown == 0 {

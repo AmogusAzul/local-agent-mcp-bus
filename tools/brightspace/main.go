@@ -52,11 +52,22 @@ func newTools(a *api) []core.Tool {
 			Execute: a.toolContent,
 		},
 		{
-			Name:        "brightspace_download",
-			Description: "Save one course file to a folder and return its path.",
+			Name:        "brightspace_assignment",
+			Description: "One assignment: instructions, instructor files, rubric, what the user submitted, grade and feedback with the rubric result. Lists file ids for brightspace_download.",
 			Args: []core.Arg{
 				{Name: "course", Description: "course id or name fragment", Required: true},
-				{Name: "topic", Description: "file topic id or name fragment", Required: true},
+				{Name: "assignment", Description: "assignment id or name fragment", Required: true},
+			},
+			Execute: a.toolAssignment,
+		},
+		{
+			Name:        "brightspace_download",
+			Description: "Save one file to a folder and return its path: a course file (topic) or an assignment's instructor, submitted or feedback file (assignment and file).",
+			Args: []core.Arg{
+				{Name: "course", Description: "course id or name fragment", Required: true},
+				{Name: "topic", Description: "course file topic id or name fragment"},
+				{Name: "assignment", Description: "assignment id or name fragment"},
+				{Name: "file", Description: "file id or name fragment from brightspace_assignment"},
 				{Name: "dest", Description: "destination folder (default: Downloads/brightspace/<course>)"},
 			},
 			Execute: a.toolDownload,

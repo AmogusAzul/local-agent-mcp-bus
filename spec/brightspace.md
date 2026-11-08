@@ -67,6 +67,10 @@ account signed in.
     and the folder's group category (`lp/{v}/{org}/groupcategories/{id}/groups/`). If it
     can't tell which group is the user's, it shows none rather than someone else's.
   - Grade values carry `Comments` (the instructor's comment) next to the grade.
+  - File routes, all under `le/{v}/{org}/dropbox/folders/{id}/`: `attachments/{fileId}`
+    (instructor files), `submissions/{submissionId}/files/{fileId}` (submitted files) and
+    `feedback/{user|group}/{entityId}/attachments/{fileId}` (feedback files; the
+    `.../download/{fileId}` route in older documentation answers 404).
 
 ## Alternatives considered
 
@@ -195,7 +199,8 @@ account signed in.
 - `brightspace_sync` with `job` set ignores the other arguments and reports that job.
 - `brightspace_assignment` lists every file with its id; `file` in `brightspace_download`
   takes that id or a name fragment. Rubrics print one line per criterion with its levels
-  (`Alto 10: description`), and the user's result next to them. Text is plain, long
+  (`Alto 10: description`), and the user's result next to them (`Alto 10/10`, without the
+  maximum when the cells carry no points). Text is plain, long
   fields are truncated, and group assignments show only the user's group.
 - `brightspace_grades` for one course adds the instructor's comment to each grade.
 - `brightspace_due` combines assignment folders and quizzes with a due date in the

@@ -67,6 +67,33 @@ func (f *fakeSite) api(w http.ResponseWriter, r *http.Request, out func(any)) {
 	switch {
 	case p == "/d2l/api/versions/":
 		out([]map[string]string{{"ProductCode": "lp", "LatestVersion": "1.1"}, {"ProductCode": "le", "LatestVersion": "1.2"}})
+	case p == "/d2l/api/lp/1.1/users/whoami":
+		out(map[string]string{"Identifier": "7"})
+	case p == "/d2l/api/lp/1.1/1/groupcategories/5/groups/":
+		out([]any{map[string]any{"GroupId": 1, "Enrollments": []int{7}}, map[string]any{"GroupId": 2, "Enrollments": []int{8}}})
+	case p == "/d2l/api/le/1.2/1/dropbox/folders/10":
+		out(map[string]any{"Id": 10, "Name": "Homework 1", "DueDate": soon, "SubmissionType": 0,
+			"CustomInstructions": map[string]string{"Text": "Solve all exercises."},
+			"Attachments":        []any{map[string]any{"FileId": 500, "FileName": "statement.pdf", "Size": 12}},
+			"Assessment": map[string]any{"ScoreDenominator": 5, "Rubrics": []any{map[string]any{
+				"RubricId": 3, "Name": "Quality",
+				"CriteriaGroups": []any{map[string]any{"Name": "g",
+					"Levels": []any{map[string]any{"Id": 1, "Name": "High"}, map[string]any{"Id": 2, "Name": "Low"}},
+					"Criteria": []any{map[string]any{"Id": 9, "Name": "Correctness", "Cells": []any{
+						map[string]any{"LevelId": 1, "Points": 10, "Description": map[string]string{"Text": "All right"}},
+						map[string]any{"LevelId": 2, "Points": 0, "Description": map[string]string{"Text": "Wrong"}}}}}}},
+				"OverallLevels": []any{map[string]any{"Id": 4, "Name": "Great"}}}}}})
+	case p == "/d2l/api/le/1.2/1/dropbox/folders/14":
+		out(map[string]any{"Id": 14, "Name": "Group project", "DueDate": soon, "SubmissionType": 0, "GroupTypeId": 5})
+	case p == "/d2l/api/le/1.2/1/grades/values/myGradeValues/":
+		out([]any{map[string]any{"GradeObjectName": "Exam", "DisplayedGrade": "90%", "PointsNumerator": 9, "PointsDenominator": 10,
+			"Comments": map[string]string{"Text": "Nice work"}}, map[string]any{"GradeObjectName": "Quiz", "DisplayedGrade": ""}})
+	case strings.HasSuffix(p, "/dropbox/folders/10/attachments/500"):
+		w.Write([]byte("statement-bytes"))
+	case strings.HasSuffix(p, "/dropbox/folders/10/submissions/77/files/600"):
+		w.Write([]byte("my-submitted-bytes"))
+	case strings.HasSuffix(p, "/dropbox/folders/10/feedback/user/7/attachments/900"):
+		w.Write([]byte("feedback-bytes"))
 	case p == "/d2l/api/lp/1.1/enrollments/myenrollments/":
 		item := func(id int, code, name, end, last string) map[string]any {
 			return map[string]any{
@@ -86,11 +113,24 @@ func (f *fakeSite) api(w http.ResponseWriter, r *http.Request, out func(any)) {
 			{"Id": 11, "Name": "Essay", "DueDate": soon, "SubmissionType": 1},
 			{"Id": 12, "Name": "Closed one", "DueDate": soon, "SubmissionType": 0, "Availability": map[string]string{"EndDate": "2020-01-01T00:00:00.000Z"}},
 			{"Id": 13, "Name": "Pdf only", "DueDate": soon, "SubmissionType": 0, "CustomAllowableFileTypes": "pdf"},
+			{"Id": 14, "Name": "Group project", "DueDate": soon, "SubmissionType": 0, "GroupTypeId": 5},
 		})
 	case p == "/d2l/api/le/1.2/2/dropbox/folders/":
 		out([]any{})
+	case strings.HasSuffix(p, "/dropbox/folders/14/submissions/mysubmissions/") && r.Method == "GET":
+		out([]any{
+			map[string]any{"Entity": map[string]any{"EntityId": 2, "EntityType": "Group"}, "Submissions": []any{map[string]any{"Id": 2, "Comment": map[string]string{"Text": "OTHERS"}}}},
+			map[string]any{"Entity": map[string]any{"EntityId": 1, "EntityType": "Group"}, "Submissions": []any{map[string]any{"Id": 1, "Comment": map[string]string{"Text": "MINE"}}}},
+		})
 	case strings.HasSuffix(p, "/submissions/mysubmissions/") && r.Method == "GET":
-		out([]any{map[string]any{"Submissions": f.subs}})
+		out([]any{
+			map[string]any{"Entity": map[string]any{"EntityId": 99, "EntityType": "User"}, "Submissions": []any{map[string]any{"Id": 5, "Comment": map[string]string{"Text": "SOMEONE ELSE"}}}},
+			map[string]any{"Entity": map[string]any{"EntityId": 7, "EntityType": "User"}, "Submissions": f.subs,
+				"Feedback": map[string]any{"Score": 4.5, "IsGraded": true, "Feedback": map[string]string{"Text": "Well done"},
+					"Files": []any{map[string]any{"FileId": 900, "FileName": "notes.txt", "Size": 14}},
+					"RubricAssessments": []any{map[string]any{"RubricId": 3, "OverallScore": 45, "OverallLevel": map[string]any{"LevelId": 4},
+						"CriteriaOutcome": []any{map[string]any{"CriterionId": 9, "LevelId": 1, "Score": 10, "Feedback": map[string]string{"Text": "Perfect"}}}}}}},
+		})
 	case strings.HasSuffix(p, "/submissions/mysubmissions/") && r.Method == "POST":
 		b, _ := io.ReadAll(r.Body)
 		f.posts = append(f.posts, b)
@@ -163,6 +203,8 @@ func (b *fakeBrowser) Login(ctx context.Context, visible bool) (*loginResult, er
 func newTestAPI(t *testing.T, silent bool) (*api, *fakeSite, *fakeBrowser) {
 	t.Helper()
 	site := &fakeSite{files: map[int64][]byte{100: []byte("pdf-bytes"), 101: []byte("slides")}}
+	site.subs = []map[string]any{{"Id": 77, "SubmissionDate": "2026-01-02T03:04:05.000Z", "Comment": map[string]string{"Text": "my answer"},
+		"Files": []map[string]any{{"FileId": 600, "FileName": "hw.pdf", "Size": 5}}}}
 	srv := httptest.NewServer(site)
 	t.Cleanup(srv.Close)
 	br := &fakeBrowser{silent: silent}
@@ -528,10 +570,76 @@ func TestToolListIsCompact(t *testing.T) {
 			n += len(a.Name) + len(a.Description)
 		}
 	}
-	if n > 2600 {
+	if n > 3300 {
 		t.Fatalf("tool text is %d bytes", n)
 	}
-	if len(ts) != 8 {
+	if len(ts) != 9 {
 		t.Fatalf("%d tools", len(ts))
+	}
+}
+
+func TestAssignment(t *testing.T) {
+	a, _, _ := newTestAPI(t, true)
+	out, err := a.toolAssignment(context.Background(), map[string]string{"course": "calc", "assignment": "homework"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"Solve all exercises", "[500] statement.pdf", "Rubric \"Quality\"", "Correctness: High 10/10 (All right) — Perfect",
+		"Overall: Great 45", "text: my answer", "[600] hw.pdf", "Grade: 4.5/5", "Feedback: Well done", "[900] notes.txt",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "SOMEONE ELSE") {
+		t.Fatal("another user's entry leaked")
+	}
+}
+
+func TestAssignmentGroupShowsOnlyMyGroup(t *testing.T) {
+	a, _, _ := newTestAPI(t, true)
+	out, err := a.toolAssignment(context.Background(), map[string]string{"course": "calc", "assignment": "group"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "MINE") || strings.Contains(out, "OTHERS") || !strings.Contains(out, "group assignment") {
+		t.Fatalf("group output:\n%s", out)
+	}
+}
+
+func TestDownloadAssignmentFiles(t *testing.T) {
+	a, _, _ := newTestAPI(t, true)
+	dest := t.TempDir()
+	for arg, want := range map[string]string{"500": "statement-bytes", "hw.pdf": "my-submitted-bytes", "notes": "feedback-bytes"} {
+		out, err := a.toolDownload(context.Background(), map[string]string{"course": "calc", "assignment": "homework", "file": arg, "dest": dest})
+		if err != nil {
+			t.Fatalf("%s: %v", arg, err)
+		}
+		path := strings.TrimSpace(strings.SplitN(strings.TrimPrefix(out, "Saved "), " (", 2)[0])
+		if b, _ := os.ReadFile(path); string(b) != want {
+			t.Errorf("%s: got %q want %q", arg, b, want)
+		}
+	}
+	for _, args := range []map[string]string{
+		{"course": "calc"},
+		{"course": "calc", "assignment": "homework"},
+		{"course": "calc", "assignment": "homework", "topic": "x", "file": "1"},
+		{"course": "calc", "assignment": "homework", "file": "nope"},
+	} {
+		if _, err := a.toolDownload(context.Background(), args); err == nil {
+			t.Errorf("accepted %v", args)
+		}
+	}
+}
+
+func TestGradesShowComment(t *testing.T) {
+	a, _, _ := newTestAPI(t, true)
+	out, err := a.toolGrades(context.Background(), map[string]string{"course": "calc"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "Exam: 90% (9/10) | comment: Nice work") || strings.Contains(out, "Quiz") {
+		t.Fatalf("grades:\n%s", out)
 	}
 }

@@ -147,7 +147,7 @@ func (a *api) toolSubmit(ctx context.Context, args map[string]string) (string, e
 		ups = append(ups, upload{p, st.Size()})
 	}
 
-	prior, _ := a.mySubmissions(ctx, c.ID, f.ID)
+	prior, _ := a.mySubmissions(ctx, c.ID, f)
 	var b strings.Builder
 	fmt.Fprintf(&b, "Course: %s\nAssignment: %s (id %d)\n", c, f.Name, f.ID)
 	fmt.Fprintf(&b, "Due: %s\n", when(parseTime(f.DueDate)))
@@ -186,7 +186,7 @@ func (a *api) toolSubmit(ctx context.Context, args map[string]string) (string, e
 	if resp.StatusCode/100 != 2 {
 		return "", statusErr(resp, "The submission")
 	}
-	after, err := a.mySubmissions(ctx, c.ID, f.ID)
+	after, err := a.mySubmissions(ctx, c.ID, f)
 	if err != nil || len(after) == 0 {
 		return fmt.Sprintf("Submitted to %q (the site accepted it), but the submission couldn't be read back.", f.Name), nil
 	}

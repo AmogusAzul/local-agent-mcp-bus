@@ -25,6 +25,7 @@ type api struct {
 
 	mu      sync.Mutex
 	lp, le  string
+	uid     int64
 	courses []course
 	fetched time.Time
 }

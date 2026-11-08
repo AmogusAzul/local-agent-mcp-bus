@@ -232,9 +232,19 @@ func saveTo(dir, name string, body io.Reader) (string, int64, error) {
 }
 
 func (a *api) toolDownload(ctx context.Context, args map[string]string) (string, error) {
+	if args["assignment"] != "" {
+		if args["file"] == "" || args["topic"] != "" {
+			return "", invalid("with assignment, pass file (and no topic)")
+		}
+	} else if args["topic"] == "" {
+		return "", invalid("pass topic (a course file) or assignment and file")
+	}
 	c, err := a.resolveCourse(ctx, args["course"])
 	if err != nil {
 		return "", err
+	}
+	if args["assignment"] != "" {
+		return a.downloadAssignFile(ctx, args, c)
 	}
 	ms, err := a.toc(ctx, c.ID)
 	if err != nil {

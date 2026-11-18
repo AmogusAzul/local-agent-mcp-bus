@@ -242,6 +242,12 @@ func (a *api) toolSubmit(ctx context.Context, args map[string]string) (string, e
 // submissionBody streams a multipart/mixed body: a JSON part with the text,
 // then one part per file.
 func submissionBody(text string, ups []upload) (io.Reader, string) {
+	js, _ := json.Marshal(map[string]any{"Text": text, "Html": nil})
+	return mixedBody(js, ups)
+}
+
+// mixedBody streams a multipart/mixed body: a JSON part, then one part per file.
+func mixedBody(js []byte, ups []upload) (io.Reader, string) {
 	pr, pw := io.Pipe()
 	mw := multipart.NewWriter(pw)
 	go func() {
@@ -252,7 +258,6 @@ func submissionBody(text string, ups []upload) (io.Reader, string) {
 			if err != nil {
 				return err
 			}
-			js, _ := json.Marshal(map[string]any{"Text": text, "Html": nil})
 			if _, err := part.Write(js); err != nil {
 				return err
 			}

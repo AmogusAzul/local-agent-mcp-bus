@@ -49,6 +49,13 @@ func (st *staffSite) serve(w http.ResponseWriter, r *http.Request) bool {
 		json.NewDecoder(r.Body).Decode(&body)
 		js, _ := json.Marshal(body)
 		st.writes = append(st.writes, r.Method+" "+p+" "+string(js))
+		if p == "/d2l/api/le/1.2/5/news/" {
+			if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/") {
+				st.writes = append(st.writes, "POST news multipart")
+			}
+			out(map[string]any{"Id": 77, "Title": body["Title"], "StartDate": body["StartDate"], "IsPublished": true})
+			return true
+		}
 		const fb = "/d2l/api/le/1.2/5/dropbox/folders/50/feedback/"
 		if strings.HasPrefix(p, fb) {
 			if body["Feedback"] != nil {

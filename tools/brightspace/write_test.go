@@ -206,3 +206,33 @@ func TestGradePreviewConfirmConflict(t *testing.T) {
 		t.Fatalf("refused calls wrote %v", st.writes)
 	}
 }
+
+func TestAnnounce(t *testing.T) {
+	a, _, st := newStaffAPI(t)
+	ctx := context.Background()
+	args := map[string]string{"course": "isis", "title": "Horario", "body": "Hoy **11 a 1**\n\n- sala ML 101", "start": "2030-01-02 08:00"}
+	out, err := a.toolAnnounce(ctx, args)
+	if err != nil || !strings.Contains(out, "Shows from:") || !strings.Contains(out, "sala ML 101") || len(st.writes) != 0 {
+		t.Fatalf("preview %q %v", out, err)
+	}
+	if _, err := a.toolAnnounce(ctx, map[string]string{"course": "calc", "title": "x", "body": "y"}); code(err) != "NOT_STAFF" {
+		t.Fatalf("student course: %v", err)
+	}
+	args["confirm"] = "true"
+	out, err = a.toolAnnounce(ctx, args)
+	if err != nil || !strings.Contains(out, "news item 77") || len(st.writes) != 1 {
+		t.Fatalf("post %q %v %v", out, err, st.writes)
+	}
+	w := st.writes[0]
+	for _, want := range []string{`"Title":"Horario"`, `strong\u003e11 a 1`, `"StartDate":"2030-01-02T`, `"IsPublished":true`} {
+		if !strings.Contains(w, want) {
+			t.Errorf("write %q lacks %q", w, want)
+		}
+	}
+	f := filepath.Join(t.TempDir(), "horario.pdf")
+	os.WriteFile(f, []byte("pdf"), 0o644)
+	args["files"] = f
+	if _, err := a.toolAnnounce(ctx, args); err != nil || st.writes[len(st.writes)-1] != "POST news multipart" {
+		t.Fatalf("attachment %v %v", err, st.writes)
+	}
+}

@@ -248,6 +248,19 @@ func staffTools(a *api) []core.Tool {
 			},
 			Execute: a.toolGrade,
 		},
+		{
+			Name:        "brightspace_announce",
+			Description: "Staff: preview, then with confirm=true post a course announcement (markdown body, optional later start, attachments). Show the preview and wait for the user.",
+			Args: []core.Arg{
+				{Name: "course", Description: "course id or name fragment (staff courses)", Required: true},
+				{Name: "title", Description: "title", Required: true},
+				{Name: "body", Description: "text, light markdown", Required: true},
+				{Name: "start", Description: "show from, e.g. 2026-11-20 08:00 (default now)"},
+				{Name: "files", Description: "attachments: full local paths, comma-separated"},
+				{Name: "confirm", Description: `"true" to post`},
+			},
+			Execute: a.toolAnnounce,
+		},
 	}
 }
 

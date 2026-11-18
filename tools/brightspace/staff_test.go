@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -19,6 +20,7 @@ type staffSite struct {
 	feedback map[string]map[string]any // "group/90" → feedback
 	values   map[string]map[string]any // "300/20" → grade value
 	access   map[int]map[string]any    // user id → special access on folder 50
+	members  map[int][]int             // group id → user ids in category 9
 	extra    func(w http.ResponseWriter, r *http.Request) bool
 }
 
@@ -47,6 +49,25 @@ func (st *staffSite) serve(w http.ResponseWriter, r *http.Request) bool {
 	out := func(v any) { json.NewEncoder(w).Encode(v) }
 	p := r.URL.Path
 	past := time.Now().Add(-48 * time.Hour).UTC().Format(time.RFC3339)
+	if strings.HasPrefix(p, "/d2l/api/lp/1.1/5/groupcategories/9/groups/") && r.Method != "GET" {
+		var g, u int
+		fmt.Sscanf(strings.TrimPrefix(p, "/d2l/api/lp/1.1/5/groupcategories/9/groups/"), "%d/enrollments/%d", &g, &u)
+		if r.Method == "POST" {
+			var body struct{ UserId int }
+			json.NewDecoder(r.Body).Decode(&body)
+			st.members[g] = append(st.members[g], body.UserId)
+		} else {
+			var keep []int
+			for _, x := range st.members[g] {
+				if x != u {
+					keep = append(keep, x)
+				}
+			}
+			st.members[g] = keep
+		}
+		st.writes = append(st.writes, r.Method+" "+p)
+		return true
+	}
 	if r.Method != "GET" && strings.Contains(p, "/5/") {
 		var body map[string]any
 		json.NewDecoder(r.Body).Decode(&body)
@@ -124,9 +145,12 @@ func (st *staffSite) serve(w http.ResponseWriter, r *http.Request) bool {
 	case p == "/d2l/api/le/1.2/5/dropbox/folders/50/submissions/1/files/700":
 		w.Write([]byte("pdf"))
 	case p == "/d2l/api/lp/1.1/5/groupcategories/9/groups/":
-		out([]any{map[string]any{"GroupId": 90, "Name": "T2-G 1", "Enrollments": []int{20, 21}}, map[string]any{"GroupId": 91, "Name": "T2-G 2", "Enrollments": []int{22}}})
+		if st.members == nil {
+			st.members = map[int][]int{90: {20, 21}, 91: {22}}
+		}
+		out([]any{map[string]any{"GroupId": 90, "Name": "T2-G 1", "Enrollments": st.members[90]}, map[string]any{"GroupId": 91, "Name": "T2-G 2", "Enrollments": st.members[91]}})
 	case p == "/d2l/api/lp/1.1/5/groupcategories/":
-		out([]any{map[string]any{"GroupCategoryId": 9, "Name": "Taller 2", "MaxUsersPerGroup": 3, "Groups": []int{90, 91}}})
+		out([]any{map[string]any{"GroupCategoryId": 9, "Name": "Taller 2", "MaxUsersPerGroup": 2, "Groups": []int{90, 91}}})
 	case p == "/d2l/api/le/1.2/5/classlist/":
 		out([]any{
 			map[string]any{"Identifier": "7", "DisplayName": "Me Myself", "ClasslistRoleDisplayName": "Monitor"},

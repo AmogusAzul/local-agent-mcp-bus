@@ -274,6 +274,19 @@ func staffTools(a *api) []core.Tool {
 			},
 			Execute: a.toolExtension,
 		},
+		{
+			Name:        "brightspace_group_move",
+			Description: "Staff: preview, then with confirm=true add a student to a group (to), remove them (from_group), or move them (both).",
+			Args: []core.Arg{
+				{Name: "course", Description: "course id or name fragment (staff courses)"},
+				{Name: "category", Description: "group category id or name fragment", Required: true},
+				{Name: "who", Description: "student id, code or name fragment", Required: true},
+				{Name: "to", Description: "group to add them to"},
+				{Name: "from_group", Description: "group to remove them from"},
+				{Name: "confirm", Description: `"true" to save`},
+			},
+			Execute: a.toolGroupMove,
+		},
 	}
 }
 

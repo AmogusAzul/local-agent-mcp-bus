@@ -271,3 +271,28 @@ func TestExtension(t *testing.T) {
 		t.Fatalf("refused calls wrote %v", st.writes)
 	}
 }
+
+func TestGroupMove(t *testing.T) {
+	a, _, st := newStaffAPI(t)
+	ctx := context.Background()
+	args := map[string]string{"course": "isis", "category": "taller", "who": "beto", "to": "T2-G 2", "from_group": "T2-G 1"}
+	out, err := a.toolGroupMove(ctx, args)
+	if err != nil || !strings.Contains(out, "now in: T2-G 1") || !strings.Contains(out, "Remove from: T2-G 1") || len(st.writes) != 0 {
+		t.Fatalf("preview %q %v", out, err)
+	}
+	args["confirm"] = "true"
+	out, err = a.toolGroupMove(ctx, args)
+	if err != nil || !strings.Contains(out, "now in: T2-G 2") || len(st.writes) != 2 || !strings.HasPrefix(st.writes[0], "DELETE") {
+		t.Fatalf("move %q %v %v", out, err, st.writes)
+	}
+	// T2-G 2 is now full (2/2).
+	if _, err := a.toolGroupMove(ctx, map[string]string{"course": "isis", "category": "taller", "who": "ana", "to": "T2-G 2", "confirm": "true"}); code(err) != "CONFLICT" {
+		t.Fatalf("full group: %v", err)
+	}
+	if _, err := a.toolGroupMove(ctx, map[string]string{"course": "isis", "category": "taller", "who": "ana", "from_group": "T2-G 2", "confirm": "true"}); err == nil {
+		t.Fatal("removed from a group they aren't in")
+	}
+	if len(st.writes) != 2 {
+		t.Fatalf("refused calls wrote %v", st.writes)
+	}
+}

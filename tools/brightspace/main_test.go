@@ -70,7 +70,7 @@ func (f *fakeSite) api(w http.ResponseWriter, r *http.Request, out func(any)) {
 	case p == "/d2l/api/lp/1.1/users/whoami":
 		out(map[string]string{"Identifier": "7"})
 	case p == "/d2l/api/lp/1.1/1/groupcategories/5/groups/":
-		out([]any{map[string]any{"GroupId": 1, "Enrollments": []int{7}}, map[string]any{"GroupId": 2, "Enrollments": []int{8}}})
+		out([]any{map[string]any{"GroupId": 1, "Name": "G 1", "Enrollments": []int{7}}, map[string]any{"GroupId": 2, "Name": "G 2", "Enrollments": []int{8}}})
 	case p == "/d2l/api/le/1.2/1/dropbox/folders/10":
 		out(map[string]any{"Id": 10, "Name": "Homework 1", "DueDate": soon, "SubmissionType": 0,
 			"CustomInstructions": map[string]string{"Text": "Solve all exercises."},
@@ -113,10 +113,21 @@ func (f *fakeSite) api(w http.ResponseWriter, r *http.Request, out func(any)) {
 			{"Id": 11, "Name": "Essay", "DueDate": soon, "SubmissionType": 1},
 			{"Id": 12, "Name": "Closed one", "DueDate": soon, "SubmissionType": 0, "Availability": map[string]string{"EndDate": "2020-01-01T00:00:00.000Z"}},
 			{"Id": 13, "Name": "Pdf only", "DueDate": soon, "SubmissionType": 0, "CustomAllowableFileTypes": "pdf"},
-			{"Id": 14, "Name": "Group project", "DueDate": soon, "SubmissionType": 0, "GroupTypeId": 5},
+			{"Id": 14, "Name": "Group project", "DueDate": soon, "SubmissionType": 0, "GroupTypeId": 5, "DropboxType": 1},
+			{"Id": 15, "Name": "Lonely teamwork", "DueDate": soon, "SubmissionType": 0, "GroupTypeId": 6, "DropboxType": 1},
+			{"Id": 16, "Name": "Strange folder", "DueDate": soon, "SubmissionType": 0},
 		})
 	case p == "/d2l/api/le/1.2/2/dropbox/folders/":
 		out([]any{})
+	case p == "/d2l/api/lp/1.1/1/groupcategories/6/groups/":
+		out([]any{map[string]any{"GroupId": 3, "Name": "Other", "Enrollments": []int{8}}})
+	case strings.HasSuffix(p, "/dropbox/folders/14/submissions/group/1/") && r.Method == "POST":
+		b, _ := io.ReadAll(r.Body)
+		f.posts = append(f.posts, b)
+		f.postTypes = append(f.postTypes, "group/1")
+		w.WriteHeader(200)
+	case strings.HasSuffix(p, "/dropbox/folders/16/submissions/mysubmissions/") && r.Method == "POST":
+		http.Error(w, `{"detail":"Assignment not found"}`, 404)
 	case strings.HasSuffix(p, "/dropbox/folders/14/submissions/mysubmissions/") && r.Method == "GET":
 		out([]any{
 			map[string]any{"Entity": map[string]any{"EntityId": 2, "EntityType": "Group"}, "Submissions": []any{map[string]any{"Id": 2, "Comment": map[string]string{"Text": "OTHERS"}}}},
@@ -641,5 +652,37 @@ func TestGradesShowComment(t *testing.T) {
 	}
 	if !strings.Contains(out, "Exam: 90% (9/10) | comment: Nice work") || strings.Contains(out, "Quiz") {
 		t.Fatalf("grades:\n%s", out)
+	}
+}
+
+func TestSubmitGroupFolder(t *testing.T) {
+	a, site, _ := newTestAPI(t, true)
+	f := filepath.Join(t.TempDir(), "hw.pdf")
+	os.WriteFile(f, []byte("12345"), 0o644)
+	ctx := context.Background()
+	out, err := a.toolSubmit(ctx, map[string]string{"course": "calc", "assignment": "group project", "files": f})
+	if err != nil || !strings.Contains(out, "Group: G 1") || len(site.posts) != 0 {
+		t.Fatalf("preview %q %v", out, err)
+	}
+	if _, err := a.toolSubmit(ctx, map[string]string{"course": "calc", "assignment": "group project", "files": f, "confirm": "true"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(site.postTypes) != 1 || site.postTypes[0] != "group/1" {
+		t.Fatalf("posted to %v", site.postTypes)
+	}
+	// No group: refused at preview, nothing sent.
+	_, err = a.toolSubmit(ctx, map[string]string{"course": "calc", "assignment": "lonely", "files": f, "confirm": "true"})
+	if ce, ok := err.(*codeErr); !ok || ce.code != "UNSUPPORTED_FOLDER" || len(site.posts) != 1 {
+		t.Fatalf("no group: %v", err)
+	}
+}
+
+func TestSubmit404IsUnsupported(t *testing.T) {
+	a, _, _ := newTestAPI(t, true)
+	f := filepath.Join(t.TempDir(), "hw.pdf")
+	os.WriteFile(f, []byte("12345"), 0o644)
+	_, err := a.toolSubmit(context.Background(), map[string]string{"course": "calc", "assignment": "strange", "files": f, "confirm": "true"})
+	if ce, ok := err.(*codeErr); !ok || ce.code != "UNSUPPORTED_FOLDER" || !strings.Contains(ce.hint, "on the site") {
+		t.Fatalf("got %v", err)
 	}
 }

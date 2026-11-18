@@ -21,6 +21,7 @@ type folder struct {
 	AllowableFileType        int
 	CustomAllowableFileTypes string
 	GroupTypeID              *int64 `json:"GroupTypeId"`
+	DropboxType              int    // 1 group, 2 individual
 	Availability             *struct {
 		StartDate string
 		EndDate   string
@@ -37,6 +38,11 @@ func (a *api) folders(ctx context.Context, org int64) ([]folder, error) {
 		return nil, err
 	}
 	return fs, nil
+}
+
+// isGroupFolder tells a group assignment from an individual one.
+func isGroupFolder(f folder) bool {
+	return f.GroupTypeID != nil || f.DropboxType == 1
 }
 
 // fileRef is a file the API lists: an attachment, a submitted file or a feedback file.
@@ -115,30 +121,57 @@ func (a *api) userID(ctx context.Context) (int64, error) {
 	return id, nil
 }
 
-// myGroups are the ids of the user's groups in a group category.
+// group is a group in a group category, with its members' user ids.
+type group struct {
+	GroupID     int64 `json:"GroupId"`
+	Name        string
+	Enrollments []int64
+}
+
+// groups lists a group category's groups.
+func (a *api) groups(ctx context.Context, org, category int64) ([]group, error) {
+	path, err := a.lpPath(ctx, fmt.Sprintf("/%d/groupcategories/%d/groups/", org, category))
+	if err != nil {
+		return nil, err
+	}
+	var gs []group
+	if err := a.getJSON(ctx, path, &gs); err != nil {
+		return nil, err
+	}
+	return gs, nil
+}
+
+// userGroups are the groups of a category that have the user as a member.
+func (a *api) userGroups(ctx context.Context, org, category, uid int64) ([]group, error) {
+	gs, err := a.groups(ctx, org, category)
+	if err != nil {
+		return nil, err
+	}
+	var out []group
+	for _, g := range gs {
+		for _, u := range g.Enrollments {
+			if u == uid {
+				out = append(out, g)
+				break
+			}
+		}
+	}
+	return out, nil
+}
+
+// myGroups are the ids of the signed-in user's groups in a group category.
 func (a *api) myGroups(ctx context.Context, org, category int64) (map[int64]bool, error) {
 	uid, err := a.userID(ctx)
 	if err != nil {
 		return nil, err
 	}
-	path, err := a.lpPath(ctx, fmt.Sprintf("/%d/groupcategories/%d/groups/", org, category))
+	gs, err := a.userGroups(ctx, org, category, uid)
 	if err != nil {
-		return nil, err
-	}
-	var gs []struct {
-		GroupID     int64 `json:"GroupId"`
-		Enrollments []int64
-	}
-	if err := a.getJSON(ctx, path, &gs); err != nil {
 		return nil, err
 	}
 	mine := map[int64]bool{}
 	for _, g := range gs {
-		for _, u := range g.Enrollments {
-			if u == uid {
-				mine[g.GroupID] = true
-			}
-		}
+		mine[g.GroupID] = true
 	}
 	return mine, nil
 }
@@ -153,6 +186,11 @@ func (a *api) myEntry(ctx context.Context, org int64, f folder) (e *entry, known
 	}
 	var all []entry
 	if err := a.getJSON(ctx, path, &all); err != nil {
+		// The site refuses this route for some group folders (403 seen once
+		// a group folder closed): report the group as unknown.
+		if isGroupFolder(f) {
+			return nil, false, nil
+		}
 		return nil, false, err
 	}
 	uid, err := a.userID(ctx)

@@ -147,9 +147,33 @@ func (a *api) toolSubmit(ctx context.Context, args map[string]string) (string, e
 		ups = append(ups, upload{p, st.Size()})
 	}
 
+	// A group folder takes the submission on the group's route, so the
+	// user's group must be known before anything is shown as sendable.
+	var grp *group
+	if isGroupFolder(f) {
+		if f.GroupTypeID == nil {
+			return "", fail("UNSUPPORTED_FOLDER", "submit it on the site.", "%q is a group assignment with no group category", f.Name)
+		}
+		uid, err := a.userID(ctx)
+		if err != nil {
+			return "", err
+		}
+		gs, err := a.userGroups(ctx, c.ID, *f.GroupTypeID, uid)
+		if err != nil {
+			return "", fail("UNSUPPORTED_FOLDER", "submit it on the site.", "%q is a group assignment and your group couldn't be read: %v", f.Name, err)
+		}
+		if len(gs) != 1 {
+			return "", fail("UNSUPPORTED_FOLDER", "join a group on the site, or submit it there.", "%q is a group assignment and you are in %d of its groups", f.Name, len(gs))
+		}
+		grp = &gs[0]
+	}
+
 	prior, _ := a.mySubmissions(ctx, c.ID, f)
 	var b strings.Builder
 	fmt.Fprintf(&b, "Course: %s\nAssignment: %s (id %d)\n", c, f.Name, f.ID)
+	if grp != nil {
+		fmt.Fprintf(&b, "Group: %s (submits for every member)\n", grp.Name)
+	}
 	fmt.Fprintf(&b, "Due: %s\n", when(parseTime(f.DueDate)))
 	if f.Availability != nil && f.Availability.EndDate != "" {
 		fmt.Fprintf(&b, "Closes: %s\n", when(parseTime(f.Availability.EndDate)))
@@ -167,7 +191,11 @@ func (a *api) toolSubmit(ctx context.Context, args map[string]string) (string, e
 	}
 
 	resp, err := a.send(ctx, func(string) (*http.Request, error) {
-		path, err := a.lePath(ctx, fmt.Sprintf("/%d/dropbox/folders/%d/submissions/mysubmissions/", c.ID, f.ID))
+		route := "mysubmissions"
+		if grp != nil {
+			route = fmt.Sprintf("group/%d", grp.GroupID)
+		}
+		path, err := a.lePath(ctx, fmt.Sprintf("/%d/dropbox/folders/%d/submissions/%s/", c.ID, f.ID, route))
 		if err != nil {
 			return nil, err
 		}
@@ -183,6 +211,10 @@ func (a *api) toolSubmit(ctx context.Context, args map[string]string) (string, e
 		return "", err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		err := statusErr(resp, "The submission")
+		return "", fail("UNSUPPORTED_FOLDER", "submit it on the site.", "The site doesn't take this submission through the API (%v)", err)
+	}
 	if resp.StatusCode/100 != 2 {
 		return "", statusErr(resp, "The submission")
 	}

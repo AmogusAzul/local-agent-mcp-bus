@@ -236,3 +236,38 @@ func TestAnnounce(t *testing.T) {
 		t.Fatalf("attachment %v %v", err, st.writes)
 	}
 }
+
+func TestExtension(t *testing.T) {
+	a, _, st := newStaffAPI(t)
+	ctx := context.Background()
+	st.access[21] = map[string]any{"StartDate": nil, "EndDate": nil, "DueDate": "2030-01-01T00:00:00.000Z"}
+	args := map[string]string{"assignment": "taller 2", "who": "ana", "due": "2030-01-05 23:59"}
+	out, err := a.toolExtension(ctx, args)
+	if err != nil || !strings.Contains(out, "Now: none") || !strings.Contains(out, "New: due") || !strings.Contains(out, "not their group") || len(st.writes) != 0 {
+		t.Fatalf("preview %q %v", out, err)
+	}
+	args["confirm"] = "true"
+	out, err = a.toolExtension(ctx, args)
+	if err != nil || len(st.writes) != 1 || !strings.Contains(st.writes[0], "PUT /d2l/api/le/1.2/5/dropbox/folders/50/specialaccess/20") || !strings.Contains(out, "now has: due") {
+		t.Fatalf("save %q %v %v", out, err, st.writes)
+	}
+	// Beto keeps his due date when only end changes.
+	out, err = a.toolExtension(ctx, map[string]string{"assignment": "50", "who": "beto", "end": "2030-01-03", "confirm": "true"})
+	if err != nil || !strings.Contains(st.writes[1], `"DueDate":"2030-01-01T00:00:00.000Z"`) {
+		t.Fatalf("keep due %q %v %v", out, err, st.writes)
+	}
+	for name, bad := range map[string]map[string]string{
+		"no dates": {"who": "ana"},
+		"end<due":  {"who": "ana", "due": "2030-02-01", "end": "2030-01-01"},
+		"staff":    {"who": "Me Myself", "due": "2030-01-01"},
+		"bad date": {"who": "ana", "due": "mañana"},
+	} {
+		bad["assignment"], bad["confirm"] = "50", "true"
+		if _, err := a.toolExtension(ctx, bad); err == nil {
+			t.Errorf("%s accepted", name)
+		}
+	}
+	if len(st.writes) != 2 {
+		t.Fatalf("refused calls wrote %v", st.writes)
+	}
+}

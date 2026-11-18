@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -17,6 +18,7 @@ type staffSite struct {
 	writes   []string
 	feedback map[string]map[string]any // "group/90" → feedback
 	values   map[string]map[string]any // "300/20" → grade value
+	access   map[int]map[string]any    // user id → special access on folder 50
 	extra    func(w http.ResponseWriter, r *http.Request) bool
 }
 
@@ -27,6 +29,7 @@ func newStaffAPI(t *testing.T) (*api, *fakeSite, *staffSite) {
 		feedback: map[string]map[string]any{
 			"group/90": {"Score": 4.0, "Feedback": map[string]string{"Text": "Good start", "Html": "<p>Good start</p>"}, "IsGraded": false, "RubricAssessments": []any{}},
 		},
+		access: map[int]map[string]any{},
 		values: map[string]map[string]any{
 			"300/20": {"PointsNumerator": 4.0, "PointsDenominator": 5.0, "DisplayedGrade": "80%", "Comments": map[string]string{"Text": "", "Html": "<p>ok</p>"}, "LastModified": "2026-11-01T00:00:00.000Z"},
 		},
@@ -65,6 +68,10 @@ func (st *staffSite) serve(w http.ResponseWriter, r *http.Request) bool {
 			body["RubricAssessments"] = []any{} // the API may not keep rubric levels sent here
 			st.feedback[strings.TrimPrefix(p, fb)] = body
 		}
+		if strings.HasPrefix(p, "/d2l/api/le/1.2/5/dropbox/folders/50/specialaccess/") {
+			uid, _ := strconv.Atoi(strings.TrimPrefix(p, "/d2l/api/le/1.2/5/dropbox/folders/50/specialaccess/"))
+			st.access[uid] = body
+		}
 		if strings.HasPrefix(p, "/d2l/api/le/1.2/5/grades/300/values/") {
 			body["LastModified"] = time.Now().UTC().Format(time.RFC3339)
 			st.values["300/"+strings.TrimPrefix(p, "/d2l/api/le/1.2/5/grades/300/values/")] = body
@@ -73,6 +80,12 @@ func (st *staffSite) serve(w http.ResponseWriter, r *http.Request) bool {
 		return true
 	}
 	switch {
+	case p == "/d2l/api/le/1.2/5/dropbox/folders/50/specialaccess/":
+		var objs []any
+		for uid, sa := range st.access {
+			objs = append(objs, map[string]any{"UserId": uid, "SpecialAccess": sa})
+		}
+		out(map[string]any{"Objects": objs, "Next": nil})
 	case p == "/d2l/api/le/1.2/5/dropbox/folders/":
 		out([]any{
 			map[string]any{"Id": 50, "Name": "Taller 2", "DueDate": past, "GroupTypeId": 9, "DropboxType": 1, "GradeItemId": 300,

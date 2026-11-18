@@ -261,6 +261,19 @@ func staffTools(a *api) []core.Tool {
 			},
 			Execute: a.toolAnnounce,
 		},
+		{
+			Name:        "brightspace_extension",
+			Description: "Staff: preview, then with confirm=true give a student special access (own due and/or close date) on an assignment.",
+			Args: []core.Arg{
+				course,
+				{Name: "assignment", Description: "assignment id or name fragment", Required: true},
+				{Name: "who", Description: "student id, code or name fragment", Required: true},
+				{Name: "due", Description: "new due date, e.g. 2026-11-22 23:59"},
+				{Name: "end", Description: "new close date"},
+				{Name: "confirm", Description: `"true" to save`},
+			},
+			Execute: a.toolExtension,
+		},
 	}
 }
 

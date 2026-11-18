@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -109,12 +110,8 @@ func (a *api) toolSync(ctx context.Context, args map[string]string) (string, err
 		}
 		return a.waitJob(ctx, j, a.jobWait), nil
 	}
-	if args["course"] == "" {
+	if args["course"] == "" && args["assignment"] == "" {
 		return "", invalid("pass course to start a sync, or job to follow one")
-	}
-	c, err := a.resolveCourse(ctx, args["course"])
-	if err != nil {
-		return "", err
 	}
 	var maxBytes int64
 	if v := args["max_mb"]; v != "" {
@@ -130,6 +127,13 @@ func (a *api) toolSync(ctx context.Context, args map[string]string) (string, err
 			types[t] = true
 		}
 	}
+	if args["assignment"] != "" {
+		return a.syncSubmissions(ctx, args, maxBytes, types)
+	}
+	c, err := a.resolveCourse(ctx, args["course"])
+	if err != nil {
+		return "", err
+	}
 	dest := args["dest"]
 	if dest == "" {
 		dest = defaultDest(c)
@@ -142,7 +146,7 @@ func (a *api) toolSync(ctx context.Context, args map[string]string) (string, err
 	flatten(ms, nil, &flat)
 
 	modFilter := strings.ToLower(strings.TrimSpace(args["module"]))
-	var work []flatTopic
+	var work []syncItem
 	skipped := 0
 	for _, t := range flat {
 		if t.TypeIdentifier != "File" {
@@ -155,15 +159,92 @@ func (a *api) toolSync(ctx context.Context, args map[string]string) (string, err
 			skipped++
 			continue
 		}
-		work = append(work, t)
+		id := t.ID
+		work = append(work, syncItem{
+			key: strconv.FormatInt(id, 10), title: t.Title, dir: t.path, modified: t.LastModifiedDate,
+			fetch: func(ctx context.Context) (*http.Response, error) { return a.topicFile(ctx, c.ID, id) },
+		})
 	}
-	j := &job{course: c.String(), dest: dest, done: make(chan struct{}), total: len(work) + skipped, skipped: skipped, finished: skipped}
-	a.jobs.add(j)
-	go a.runSync(j, c, work, dest, maxBytes)
-	return a.waitJob(ctx, j, a.jobWait), nil
+	return a.startSync(ctx, c.String(), dest, work, skipped, maxBytes, ""), nil
 }
 
-func (a *api) runSync(j *job, c course, work []flatTopic, dest string, maxBytes int64) {
+// syncItem is one file a sync job mirrors.
+type syncItem struct {
+	key, title, modified string
+	dir                  []string // folders under the destination
+	fetch                func(context.Context) (*http.Response, error)
+}
+
+func (a *api) startSync(ctx context.Context, what, dest string, work []syncItem, skipped int, maxBytes int64, note string) string {
+	j := &job{course: what, dest: dest, done: make(chan struct{}), total: len(work) + skipped, skipped: skipped, finished: skipped}
+	a.jobs.add(j)
+	go a.runSync(j, work, dest, maxBytes)
+	out := a.waitJob(ctx, j, a.jobWait)
+	if note != "" {
+		out += "\n" + note
+	}
+	return out
+}
+
+// syncSubmissions mirrors one folder's submissions (staff), one subfolder
+// per user or group.
+func (a *api) syncSubmissions(ctx context.Context, args map[string]string, maxBytes int64, types map[string]bool) (string, error) {
+	if !a.staff {
+		return "", fail("NOT_STAFF", "the server runs without staff tools (BRIGHTSPACE_STAFF=1).", "Mirroring submissions is a staff feature")
+	}
+	c, f, err := a.staffFolder(ctx, args["course"], args["assignment"])
+	if err != nil {
+		return "", err
+	}
+	es, err := a.allEntries(ctx, c.ID, f.ID)
+	if err != nil {
+		return "", err
+	}
+	dest := args["dest"]
+	if dest == "" {
+		dest = filepath.Join(defaultDest(c), safeName(f.Name))
+	}
+	var work []syncItem
+	skipped := 0
+	for _, e := range es {
+		for _, s := range e.Submissions {
+			dir := []string{e.name()}
+			if len(e.Submissions) > 1 {
+				dir = append(dir, parseTime(s.SubmissionDate).Local().Format("2006-01-02 1504"))
+			}
+			for _, fl := range s.Files {
+				if len(types) > 0 && !types[strings.TrimPrefix(strings.ToLower(filepath.Ext(fl.FileName)), ".")] {
+					skipped++
+					continue
+				}
+				sid, fid := s.ID, fl.FileID
+				work = append(work, syncItem{
+					key: "file-" + strconv.FormatInt(fid, 10), title: e.name() + "/" + fl.FileName,
+					dir: dir, modified: s.SubmissionDate,
+					fetch: func(ctx context.Context) (*http.Response, error) {
+						p, err := a.lePath(ctx, fmt.Sprintf("/%d/dropbox/folders/%d/submissions/%d/files/%d", c.ID, f.ID, sid, fid))
+						if err != nil {
+							return nil, err
+						}
+						resp, err := a.send(ctx, func(string) (*http.Request, error) { return http.NewRequest("GET", a.site+p, nil) })
+						if err != nil {
+							return nil, err
+						}
+						if resp.StatusCode/100 != 2 {
+							defer resp.Body.Close()
+							return nil, statusErr(resp, "The file")
+						}
+						return resp, nil
+					},
+				})
+			}
+		}
+	}
+	return a.startSync(ctx, c.Code+" "+f.Name, dest, work, skipped, maxBytes,
+		"Downloading may mark unread submission files as read on the site."), nil
+}
+
+func (a *api) runSync(j *job, work []syncItem, dest string, maxBytes int64) {
 	defer close(j.done)
 	if err := os.MkdirAll(dest, 0o755); err != nil {
 		j.mu.Lock()
@@ -194,15 +275,15 @@ func (a *api) runSync(j *job, c course, work []flatTopic, dest string, maxBytes 
 		go func() {
 			defer wg.Done()
 			defer func() { <-sem }()
-			key := strconv.FormatInt(t.ID, 10)
+			key := t.key
 			dir := dest
-			for _, p := range t.path {
+			for _, p := range t.dir {
 				dir = filepath.Join(dir, safeName(p))
 			}
 			manMu.Lock()
 			prev, ok := man[key]
 			manMu.Unlock()
-			if ok && prev.Modified == t.LastModifiedDate {
+			if ok && prev.Modified == t.modified {
 				if st, err := os.Stat(prev.Path); err == nil && st.Size() == prev.Size {
 					j.mu.Lock()
 					j.same++
@@ -215,10 +296,10 @@ func (a *api) runSync(j *job, c course, work []flatTopic, dest string, maxBytes 
 				j.mu.Lock()
 				j.failed++
 				j.finished++
-				j.failures = append(j.failures, fmt.Sprintf("%s: %v", t.Title, err))
+				j.failures = append(j.failures, fmt.Sprintf("%s: %v", t.title, err))
 				j.mu.Unlock()
 			}
-			resp, err := a.topicFile(ctx, c.ID, t.ID)
+			resp, err := t.fetch(ctx)
 			if err != nil {
 				fail1(err)
 				return
@@ -228,17 +309,17 @@ func (a *api) runSync(j *job, c course, work []flatTopic, dest string, maxBytes 
 				j.mu.Lock()
 				j.skipped++
 				j.finished++
-				j.failures = append(j.failures, fmt.Sprintf("%s: %s is over the size limit", t.Title, size(resp.ContentLength)))
+				j.failures = append(j.failures, fmt.Sprintf("%s: %s is over the size limit", t.title, size(resp.ContentLength)))
 				j.mu.Unlock()
 				return
 			}
-			path, n, err := saveTo(dir, remoteName(resp, t.Title), resp.Body)
+			path, n, err := saveTo(dir, remoteName(resp, filepath.Base(t.title)), resp.Body)
 			if err != nil {
 				fail1(err)
 				return
 			}
 			manMu.Lock()
-			man[key] = manifestEntry{Path: path, Size: n, Modified: t.LastModifiedDate}
+			man[key] = manifestEntry{Path: path, Size: n, Modified: t.modified}
 			manMu.Unlock()
 			j.mu.Lock()
 			j.fetched++

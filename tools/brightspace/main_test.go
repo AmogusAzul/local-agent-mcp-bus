@@ -113,6 +113,7 @@ func (f *fakeSite) api(w http.ResponseWriter, r *http.Request, out func(any)) {
 			item(2, "202620_MATH_2", "Algebra", time.Now().Add(1000*time.Hour).UTC().Format(time.RFC3339), ""),
 			item(3, "202510_OLD_1", "Old course", "2025-06-01T00:00:00.000Z", ""),
 			item(4, "AD_STALE", "Undated stale", "", "2024-01-01T00:00:00.000Z"),
+			staffItem(item(5, "202620_ISIS_3", "Fundamentos", time.Now().Add(1000*time.Hour).UTC().Format(time.RFC3339), "")),
 		}})
 	case p == "/d2l/api/le/1.2/1/dropbox/folders/":
 		out([]map[string]any{
@@ -171,6 +172,14 @@ func (f *fakeSite) api(w http.ResponseWriter, r *http.Request, out func(any)) {
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+// staffItem marks an enrollment as taught (Monitor).
+func staffItem(m map[string]any) map[string]any {
+	acc := m["Access"].(map[string]any)
+	acc["LISRoles"] = []string{"urn:lti:instrole:ims/lis/Faculty", "urn:lti:instrole:ims/lis/Instructor"}
+	acc["ClasslistRoleName"] = "Monitor"
+	return m
 }
 
 func (f *fakeSite) count(prefix string) int {

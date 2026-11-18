@@ -2,6 +2,7 @@
 package main
 
 import (
+	"os"
 	"time"
 
 	"github.com/AmogusAzul/local-agent-mcp-bus/core"
@@ -11,7 +12,7 @@ import (
 var siteURL = "https://bloqueneon.uniandes.edu.co"
 
 func newTools(a *api) []core.Tool {
-	return []core.Tool{
+	ts := []core.Tool{
 		{
 			Name:        "brightspace_courses",
 			Description: "List the user's Brightspace courses (id | code | name). Current ones unless all=true.",
@@ -161,11 +162,65 @@ func newTools(a *api) []core.Tool {
 			Execute: a.toolWeb,
 		},
 	}
+	if !a.staff {
+		return ts
+	}
+	for i := range ts {
+		if ts[i].Name == "brightspace_sync" {
+			ts[i].Args = append(ts[i].Args, core.Arg{Name: "assignment", Description: "staff: mirror this assignment's submissions instead"})
+		}
+	}
+	return append(ts, staffTools(a)...)
+}
+
+// staffTools are registered only with BRIGHTSPACE_STAFF=1. See spec/brightspace-ta.md.
+func staffTools(a *api) []core.Tool {
+	course := core.Arg{Name: "course", Description: "course id or name fragment (staff courses)"}
+	return []core.Tool{
+		{
+			Name:        "brightspace_staff",
+			Description: "Staff overview per taught course: assignments with submitted, graded and unread counts; ungraded quizzes.",
+			Args:        []core.Arg{course},
+			Execute:     a.toolStaff,
+		},
+		{
+			Name:        "brightspace_submissions",
+			Description: "Staff: every user/group in one assignment: submitted at (late marked), file ids, score, draft/published, feedback.",
+			Args: []core.Arg{
+				course,
+				{Name: "assignment", Description: "assignment id or name fragment", Required: true},
+				{Name: "status", Description: "all (default), ungraded, missing, late"},
+				{Name: "who", Description: "id, group or name fragment"},
+			},
+			Execute: a.toolSubmissions,
+		},
+		{
+			Name:        "brightspace_gradebook",
+			Description: "Staff: grade items with stats; with item, everyone's value and comments; with who, one student's row.",
+			Args: []core.Arg{
+				{Name: "course", Description: "course id or name fragment (staff courses)", Required: true},
+				{Name: "item", Description: "grade item id or name fragment"},
+				{Name: "who", Description: "student id or name fragment"},
+			},
+			Execute: a.toolGradebook,
+		},
+		{
+			Name:        "brightspace_quiz_results",
+			Description: "Staff: a quiz's attempts: best score, attempts and time per student, who didn't take it; or one student's attempts.",
+			Args: []core.Arg{
+				course,
+				{Name: "quiz", Description: "quiz id or name fragment", Required: true},
+				{Name: "who", Description: "student id or name fragment"},
+			},
+			Execute: a.toolQuizResults,
+		},
+	}
 }
 
 func main() {
 	s := newSession(siteURL)
 	a := newAPI(s)
 	a.jobWait = 30 * time.Second
+	a.staff = os.Getenv("BRIGHTSPACE_STAFF") == "1"
 	core.Serve("brightspace", "0.1.0", newTools(a)...)
 }

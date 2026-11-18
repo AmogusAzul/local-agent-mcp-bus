@@ -17,10 +17,15 @@ import (
 )
 
 func findFolder(fs []folder, arg string) (folder, error) {
+	return findFolderIn(fs, arg, false)
+}
+
+// findFolderIn finds a folder by id or name fragment; staff also see hidden ones.
+func findFolderIn(fs []folder, arg string, hidden bool) (folder, error) {
 	arg = strings.TrimSpace(arg)
 	var visible []folder
 	for _, f := range fs {
-		if !f.IsHidden {
+		if hidden || !f.IsHidden {
 			visible = append(visible, f)
 		}
 	}

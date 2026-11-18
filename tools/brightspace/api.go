@@ -21,6 +21,7 @@ type api struct {
 	now  func() time.Time
 
 	jobs    jobs
+	staff   bool          // staff tools are on (BRIGHTSPACE_STAFF=1)
 	jobWait time.Duration // how long a call waits for a background job
 
 	mu      sync.Mutex
@@ -156,6 +157,7 @@ type course struct {
 	ID         int64
 	Name, Code string
 	Current    bool
+	Staff      bool // the user teaches here (an Instructor LIS role, e.g. Monitor)
 }
 
 func (c course) String() string {
@@ -203,6 +205,7 @@ func (a *api) allCourses(ctx context.Context) ([]course, error) {
 					StartDate    string
 					EndDate      string
 					LastAccessed string
+					LISRoles     []string
 				}
 			}
 		}
@@ -224,7 +227,13 @@ func (a *api) allCourses(ctx context.Context) ([]course, error) {
 					cur = false
 				}
 			}
-			out = append(out, course{ID: it.OrgUnit.ID, Name: it.OrgUnit.Name, Code: it.OrgUnit.Code, Current: cur})
+			staff := false
+			for _, r := range it.Access.LISRoles {
+				if strings.HasSuffix(strings.ToLower(r), "/instructor") {
+					staff = true
+				}
+			}
+			out = append(out, course{ID: it.OrgUnit.ID, Name: it.OrgUnit.Name, Code: it.OrgUnit.Code, Current: cur, Staff: staff})
 		}
 		if !r.PagingInfo.HasMoreItems || r.PagingInfo.Bookmark == "" {
 			break

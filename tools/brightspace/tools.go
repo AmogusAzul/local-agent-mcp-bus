@@ -22,7 +22,10 @@ type folder struct {
 	CustomAllowableFileTypes string
 	GroupTypeID              *int64 `json:"GroupTypeId"`
 	DropboxType              int    // 1 group, 2 individual
-	Availability             *struct {
+	GradeItemID              *int64 `json:"GradeItemId"`
+	// Counts only staff get.
+	TotalUsers, TotalUsersWithSubmissions, TotalUsersWithFeedback, UnreadFiles int
+	Availability                                                               *struct {
 		StartDate string
 		EndDate   string
 	}
@@ -50,11 +53,13 @@ type fileRef struct {
 	FileID   int64 `json:"FileId"`
 	FileName string
 	Size     int64
+	IsRead   *bool // submitted files, as staff see them
 }
 
 // submission is one of the user's own submissions to a folder.
 type submission struct {
 	ID             int64 `json:"Id"`
+	SubmittedBy    struct{ Identifier, DisplayName string }
 	SubmissionDate string
 	Comment        struct{ Text string }
 	Files          []fileRef
@@ -78,6 +83,7 @@ type rubricAssessment struct {
 type feedback struct {
 	Score             *float64
 	Feedback          *struct{ Text, Html string }
+	GradedSymbol      string
 	Files             []fileRef
 	IsGraded          bool
 	RubricAssessments []rubricAssessment
@@ -86,8 +92,11 @@ type feedback struct {
 // entry is the status of one user or group in a folder.
 type entry struct {
 	Entity struct {
-		EntityID   int64 `json:"EntityId"`
-		EntityType string
+		EntityID    int64 `json:"EntityId"`
+		EntityType  string
+		Name        string // groups
+		DisplayName string // users
+		Active      bool
 	}
 	Status      int
 	Feedback    *feedback
@@ -240,6 +249,11 @@ func (a *api) mySubmissions(ctx context.Context, org int64, f folder) ([]submiss
 
 // eachCourse runs fn for every course, a few at a time, in order.
 func eachCourse[T any](cs []course, fn func(course) T) []T {
+	return parallel(cs, fn)
+}
+
+// parallel runs fn for every item, a few at a time, keeping the order.
+func parallel[S, T any](cs []S, fn func(S) T) []T {
 	out := make([]T, len(cs))
 	sem := make(chan struct{}, 4)
 	var wg sync.WaitGroup

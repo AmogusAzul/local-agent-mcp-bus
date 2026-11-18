@@ -232,6 +232,22 @@ func staffTools(a *api) []core.Tool {
 			},
 			Execute: a.toolFeedback,
 		},
+		{
+			Name: "brightspace_grade",
+			Description: "Staff: preview, then with confirm=true set a numeric grade item's value and comments for a student, or rows from a CSV/JSON file. " +
+				"For assignment grades use brightspace_feedback. Show the preview and wait for the user.",
+			Args: []core.Arg{
+				{Name: "course", Description: "course id or name fragment (staff courses)"},
+				{Name: "item", Description: "grade item id or name fragment", Required: true},
+				{Name: "who", Description: "student id, code or name fragment"},
+				{Name: "value", Description: "points (default: kept)"},
+				{Name: "comment", Description: "comment students see (default: kept)"},
+				{Name: "private", Description: "staff-only comment (default: kept)"},
+				{Name: "from", Description: "CSV/JSON file with who,value,comment,private rows (max 200)"},
+				{Name: "confirm", Description: `"true" to write`},
+			},
+			Execute: a.toolGrade,
+		},
 	}
 }
 

@@ -117,8 +117,8 @@ func (st *staffSite) serve(w http.ResponseWriter, r *http.Request) bool {
 	case p == "/d2l/api/le/1.2/5/updates/myUpdates":
 		out(map[string]any{"UngradedQuizzes": 3})
 	case p == "/d2l/api/le/1.2/5/grades/":
-		out([]any{map[string]any{"Id": 300, "Name": "Taller 2", "MaxPoints": 5, "Weight": 10, "AssociatedTool": map[string]any{"ToolId": 2000, "ToolItemId": 50}},
-			map[string]any{"Id": 301, "Name": "Quiz 1", "MaxPoints": 10}})
+		out([]any{map[string]any{"Id": 300, "Name": "Taller 2", "MaxPoints": 5, "Weight": 10, "GradeType": "Numeric", "AssociatedTool": map[string]any{"ToolId": 2000, "ToolItemId": 50}},
+			map[string]any{"Id": 301, "Name": "Quiz 1", "MaxPoints": 10, "GradeType": "Numeric"}, map[string]any{"Id": 302, "Name": "Pass/fail", "GradeType": "PassFail"}})
 	case p == "/d2l/api/le/1.2/5/grades/301":
 		out(map[string]any{"Id": 301, "Name": "Quiz 1", "MaxPoints": 10})
 	case p == "/d2l/api/le/1.2/5/grades/300/statistics":

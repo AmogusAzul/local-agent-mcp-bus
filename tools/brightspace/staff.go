@@ -623,38 +623,13 @@ func (a *api) itemValues(ctx context.Context, org, item int64) ([]userGrade, err
 	return paged[userGrade](ctx, a, path, 50)
 }
 
-// student finds one class-list student by id or name fragment.
+// student finds one class-list member by id, code or name fragment.
 func (a *api) student(ctx context.Context, org int64, arg string) (member, error) {
 	ms, err := a.classlist(ctx, org)
 	if err != nil {
 		return member{}, err
 	}
-	arg = strings.TrimSpace(arg)
-	low := strings.ToLower(arg)
-	var m []member
-	for _, x := range ms {
-		if x.Identifier == arg || x.OrgDefinedID == arg {
-			return x, nil
-		}
-		if strings.Contains(strings.ToLower(x.DisplayName), low) || strings.EqualFold(x.Username, arg) {
-			m = append(m, x)
-		}
-	}
-	switch len(m) {
-	case 0:
-		return member{}, fail("NOT_FOUND", "list people with brightspace_people.", "Nobody in this course matches %q", arg)
-	case 1:
-		return m[0], nil
-	}
-	var ns []string
-	for i, x := range m {
-		if i == 6 {
-			ns = append(ns, "…")
-			break
-		}
-		ns = append(ns, fmt.Sprintf("%s %s", x.Identifier, x.DisplayName))
-	}
-	return member{}, invalid("%q matches several people (%s). Use the id", arg, strings.Join(ns, "; "))
+	return pickMember(ms, arg)
 }
 
 func toolName(t int64) string {

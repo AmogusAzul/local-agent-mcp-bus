@@ -158,3 +158,51 @@ func TestMarkdown(t *testing.T) {
 		t.Fatalf("got  %s\nwant %s", got, want)
 	}
 }
+
+func TestGradePreviewConfirmConflict(t *testing.T) {
+	a, _, st := newStaffAPI(t)
+	ctx := context.Background()
+	args := map[string]string{"course": "isis", "item": "taller 2", "who": "ana", "value": "4.5", "private": "revisar"}
+	out, err := a.toolGrade(ctx, args)
+	if err != nil || !strings.Contains(out, "now: 4/5 (80%) | comment: ok") || !strings.Contains(out, "new: 4.5/5 | private: revisar") ||
+		!strings.Contains(out, "linked to assignment 50") || len(st.writes) != 0 {
+		t.Fatalf("preview %q %v", out, err)
+	}
+	args["confirm"] = "true"
+	out, err = a.toolGrade(ctx, args)
+	if err != nil || len(st.writes) != 1 {
+		t.Fatalf("confirm %q %v", out, err)
+	}
+	w := st.writes[0]
+	for _, want := range []string{"PUT /d2l/api/le/1.2/5/grades/300/values/20", `"PointsNumerator":4.5`, `"GradeObjectType":1`, `\u003cp\u003eok\u003c/p\u003e`, "revisar"} {
+		if !strings.Contains(w, want) {
+			t.Errorf("write %q lacks %q", w, want)
+		}
+	}
+	// Changed on the site after a new preview: CONFLICT, nothing written.
+	delete(args, "confirm")
+	a.toolGrade(ctx, args)
+	st.values["300/20"]["LastModified"] = "2030-01-01T00:00:00.000Z"
+	args["confirm"] = "true"
+	out, _ = a.toolGrade(ctx, args)
+	if !strings.Contains(out, "CONFLICT") || len(st.writes) != 1 {
+		t.Fatalf("conflict %q %v", out, st.writes)
+	}
+	for name, bad := range map[string]map[string]string{
+		"over max":    {"who": "ana", "value": "6"},
+		"staff":       {"who": "Me Myself", "value": "1"},
+		"no value":    {"who": "beto", "comment": "hola"},
+		"not numeric": {"who": "ana", "value": "1", "item": "pass"},
+	} {
+		bad["course"], bad["confirm"] = "isis", "true"
+		if bad["item"] == "" {
+			bad["item"] = "300"
+		}
+		if _, err := a.toolGrade(ctx, bad); err == nil {
+			t.Errorf("%s accepted", name)
+		}
+	}
+	if len(st.writes) != 1 {
+		t.Fatalf("refused calls wrote %v", st.writes)
+	}
+}

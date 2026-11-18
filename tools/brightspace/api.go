@@ -25,6 +25,7 @@ type api struct {
 
 	mu      sync.Mutex
 	lp, le  string
+	vers    map[string]string // every product's latest API version
 	uid     int64
 	courses []course
 	fetched time.Time
@@ -115,7 +116,9 @@ func (a *api) versions(ctx context.Context) (lp, le string, err error) {
 	if err := a.getJSON(ctx, "/d2l/api/versions/", &vs); err != nil {
 		return "", "", err
 	}
+	all := map[string]string{}
 	for _, v := range vs {
+		all[v.ProductCode] = v.LatestVersion
 		switch v.ProductCode {
 		case "lp":
 			lp = v.LatestVersion
@@ -127,7 +130,7 @@ func (a *api) versions(ctx context.Context) (lp, le string, err error) {
 		return "", "", fail("API_ERROR", "", "The site didn't list its API versions")
 	}
 	a.mu.Lock()
-	a.lp, a.le = lp, le
+	a.lp, a.le, a.vers = lp, le, all
 	a.mu.Unlock()
 	return lp, le, nil
 }

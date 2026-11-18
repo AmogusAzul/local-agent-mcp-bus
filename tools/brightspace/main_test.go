@@ -27,6 +27,9 @@ type fakeSite struct {
 	expireTok bool // answer 401 to the current token once
 	subs      []map[string]any
 	files     map[int64][]byte
+	// extra handles a request first when set; it runs under mu and returns
+	// whether it answered. Its API calls are already authorized.
+	extra func(w http.ResponseWriter, r *http.Request) bool
 }
 
 const goodToken = "tok-good"
@@ -36,6 +39,10 @@ func (f *fakeSite) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer f.mu.Unlock()
 	f.reqs = append(f.reqs, r.Method+" "+r.URL.Path)
 	out := func(v any) { json.NewEncoder(w).Encode(v) }
+	authed := r.Header.Get("Authorization") == "Bearer "+goodToken && !f.expireTok
+	if f.extra != nil && (authed || !strings.HasPrefix(r.URL.Path, "/d2l/api/")) && f.extra(w, r) {
+		return
+	}
 	switch {
 	case r.URL.Path == "/d2l/home":
 		if !strings.Contains(r.Header.Get("Cookie"), "d2lSessionVal=good") {
@@ -581,10 +588,10 @@ func TestToolListIsCompact(t *testing.T) {
 			n += len(a.Name) + len(a.Description)
 		}
 	}
-	if n > 3300 {
+	if n > 4300 {
 		t.Fatalf("tool text is %d bytes", n)
 	}
-	if len(ts) != 9 {
+	if len(ts) != 11 {
 		t.Fatalf("%d tools", len(ts))
 	}
 }

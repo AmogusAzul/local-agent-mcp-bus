@@ -128,6 +128,28 @@ func (s *session) token(ctx context.Context) (string, error) {
 	return "", fail("LOGIN_PENDING", "retry in a few seconds.", "A silent sign-in is still running")
 }
 
+// cookies returns the site cookies as a Cookie header and the XSRF token,
+// signing in first when there is no session.
+func (s *session) cookies(ctx context.Context) (string, string, error) {
+	if _, err := s.token(ctx); err != nil {
+		return "", "", err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.cookieHeader(), s.data.XSRF, nil
+}
+
+// expire forgets cookies the site no longer accepts, so the next call signs
+// in again.
+func (s *session) expire(cookie string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.cookieHeader() == cookie {
+		s.data = sessionData{}
+		os.Remove(s.path)
+	}
+}
+
 // invalidate forgets a token the API rejected, so the next call mints again.
 func (s *session) invalidate(tok string) {
 	s.mu.Lock()

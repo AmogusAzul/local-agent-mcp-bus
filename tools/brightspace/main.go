@@ -98,6 +98,33 @@ func newTools(a *api) []core.Tool {
 			},
 			Execute: a.toolSubmit,
 		},
+		{
+			Name: "brightspace_api",
+			Description: "Any Brightspace (Valence) API call, for what no other tool covers. GET returns trimmed JSON; " +
+				"other methods only preview until confirm=true (show the preview to the user first). path=help lists routes.",
+			Args: []core.Arg{
+				{Name: "path", Description: "route like le/{courseId}/news/ (versions added), or help", Required: true},
+				{Name: "method", Description: "GET (default), POST, PUT, DELETE, PATCH"},
+				{Name: "query", Description: "a=1&b=2"},
+				{Name: "body", Description: "JSON, or @path to a JSON file"},
+				{Name: "max", Description: "reply size cap in chars (default 6000)"},
+				{Name: "confirm", Description: `"true" to send a write`},
+			},
+			Execute: a.toolAPI,
+		},
+		{
+			Name: "brightspace_web",
+			Description: "A Brightspace page as text with its forms and links, for features without an API (attendance, email). " +
+				"With form/fields it previews a form submit; confirm=true sends it as the user.",
+			Args: []core.Arg{
+				{Name: "url", Description: "page path like /d2l/home/123, or a full site URL", Required: true},
+				{Name: "form", Description: "form number or name on that page, to submit it"},
+				{Name: "fields", Description: "fields to set: a=1&b=2 or a JSON object"},
+				{Name: "max", Description: "reply size cap in chars (default 6000)"},
+				{Name: "confirm", Description: `"true" to send`},
+			},
+			Execute: a.toolWeb,
+		},
 	}
 }
 

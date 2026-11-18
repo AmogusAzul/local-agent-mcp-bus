@@ -99,6 +99,41 @@ func newTools(a *api) []core.Tool {
 			Execute: a.toolSubmit,
 		},
 		{
+			Name:        "brightspace_calendar",
+			Description: "Calendar events (classes, exams, deadlines) across current courses, soonest first.",
+			Args: []core.Arg{
+				{Name: "days", Description: "look ahead this many days (default 14)"},
+				{Name: "course", Description: "course id or name fragment (default: all current)"},
+			},
+			Execute: a.toolCalendar,
+		},
+		{
+			Name:        "brightspace_updates",
+			Description: "What changed per course since the last call: announcements, grades, content, assignments, plus the site's unread counts.",
+			Args:        []core.Arg{{Name: "course", Description: "course id or name fragment (default: all current)"}},
+			Execute:     a.toolUpdates,
+		},
+		{
+			Name:        "brightspace_people",
+			Description: "A course's class list: name, id, role, groups. contact=true adds email and student code.",
+			Args: []core.Arg{
+				{Name: "course", Description: "course id or name fragment", Required: true},
+				{Name: "group", Description: "only members of groups matching this"},
+				{Name: "role", Description: "only this role (e.g. Estudiante)"},
+				{Name: "contact", Description: `"true" for email and code`},
+			},
+			Execute: a.toolPeople,
+		},
+		{
+			Name:        "brightspace_groups",
+			Description: "A course's group categories and groups: sizes, self-enrollment window, which is yours; members with category.",
+			Args: []core.Arg{
+				{Name: "course", Description: "course id or name fragment", Required: true},
+				{Name: "category", Description: "category id or name fragment, to list members"},
+			},
+			Execute: a.toolGroups,
+		},
+		{
 			Name: "brightspace_api",
 			Description: "Any Brightspace (Valence) API call, for what no other tool covers. GET returns trimmed JSON; " +
 				"other methods only preview until confirm=true (show the preview to the user first). path=help lists routes.",

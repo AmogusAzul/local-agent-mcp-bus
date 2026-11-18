@@ -588,10 +588,10 @@ func TestToolListIsCompact(t *testing.T) {
 			n += len(a.Name) + len(a.Description)
 		}
 	}
-	if n > 4300 {
+	if n > 5200 {
 		t.Fatalf("tool text is %d bytes", n)
 	}
-	if len(ts) != 11 {
+	if len(ts) != 15 {
 		t.Fatalf("%d tools", len(ts))
 	}
 }

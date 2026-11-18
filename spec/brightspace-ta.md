@@ -75,10 +75,18 @@ A GET-only sweep on 2026-11-17 (full table in the local
 - **Every write is preview + `confirm="true"`**, as `brightspace_submit`. The
   preview shows exactly what changes per student (old → new), and nothing is sent
   without confirm. Tool descriptions tell the model to show the preview and wait.
-- **Grading is draft-first.** `brightspace_feedback` saves feedback unpublished
+- **Grading is draft-first.** `brightspace_feedback` saves new feedback unpublished
   (`IsGraded=false`) unless `publish="true"`. Students see nothing until the user (or
   a later `publish`) releases it. Publishing a whole folder is its own confirmed
-  call.
+  call. Editing feedback that is already published keeps it published, so a fix
+  doesn't hide a grade; `publish="false"` turns it back into a draft.
+  - A write replaces the whole feedback, so omitted parts (score, text) keep their
+    current value, and the rubric assessment the site holds is sent back unchanged.
+  - Rubric levels go in the feedback's `RubricAssessments`. If the read-back shows
+    the API dropped them, the reply says to set them on the site (the score, the
+    rubric total, is still saved).
+  - Targets come from the folder's groups or the class list, never from the ids the
+    route would accept (the feedback route doesn't validate the entity).
 - **Batch from a file.** Grading 10 groups one call at a time is slow and costly.
   `brightspace_feedback` and `brightspace_grade` take either one target or `from`, a
   local CSV/JSON file (`entity, score, feedback[, criterion=level…]`). The preview
@@ -101,8 +109,10 @@ A GET-only sweep on 2026-11-17 (full table in the local
   - Any remaining 404 at confirm maps to `UNSUPPORTED_FOLDER` with "submit it on the
     site" as the hint.
 - **New error code** `NOT_STAFF`. `CONFLICT` when a write finds the value changed
-  since the preview (someone else graded meanwhile): the preview carries the
-  `LastModified` it saw.
+  since the preview (someone else graded meanwhile): the server remembers the state
+  each preview showed (`LastModified` for grades, a fingerprint for feedback) and
+  compares before writing. A confirm with no preview in the same server process has
+  nothing to compare with and writes.
 
 ## Interface
 

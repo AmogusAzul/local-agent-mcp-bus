@@ -13,8 +13,9 @@ type rubric struct {
 	CriteriaGroups []struct {
 		Name   string
 		Levels []struct {
-			ID   int64 `json:"Id"`
-			Name string
+			ID     int64 `json:"Id"`
+			Name   string
+			Points *float64
 		}
 		Criteria []struct {
 			ID    int64 `json:"Id"`

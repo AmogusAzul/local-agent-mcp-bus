@@ -214,6 +214,24 @@ func staffTools(a *api) []core.Tool {
 			},
 			Execute: a.toolQuizResults,
 		},
+		{
+			Name: "brightspace_feedback",
+			Description: "Staff: preview, then with confirm=true save score, feedback text and rubric levels for a user/group, or rows from a CSV/JSON file. " +
+				"Saved as a draft (hidden) unless publish=true; publish_all=true publishes the assignment's drafts. Show the preview and wait for the user.",
+			Args: []core.Arg{
+				course,
+				{Name: "assignment", Description: "assignment id or name fragment", Required: true},
+				{Name: "who", Description: "user/group id, group name, or name fragment"},
+				{Name: "score", Description: "number (default: rubric total, else kept)"},
+				{Name: "text", Description: "feedback, light markdown (default: kept)"},
+				{Name: "rubric", Description: "criterion=level pairs, comma-separated"},
+				{Name: "from", Description: "CSV/JSON file with who,score,text,rubric[,publish] rows (max 200)"},
+				{Name: "publish", Description: `"true" to release to students, "false" to make a draft`},
+				{Name: "publish_all", Description: `"true" to publish every draft here`},
+				{Name: "confirm", Description: `"true" to write`},
+			},
+			Execute: a.toolFeedback,
+		},
 	}
 }
 

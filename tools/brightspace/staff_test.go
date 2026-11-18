@@ -55,6 +55,7 @@ func (st *staffSite) serve(w http.ResponseWriter, r *http.Request) bool {
 				fbm := body["Feedback"].(map[string]any)
 				body["Feedback"] = map[string]any{"Text": plain(fbm["Content"].(string)), "Html": fbm["Content"]}
 			}
+			body["RubricAssessments"] = []any{} // the API may not keep rubric levels sent here
 			st.feedback[strings.TrimPrefix(p, fb)] = body
 		}
 		if strings.HasPrefix(p, "/d2l/api/le/1.2/5/grades/300/values/") {
@@ -89,7 +90,17 @@ func (st *staffSite) serve(w http.ResponseWriter, r *http.Request) bool {
 		if f := st.feedback["group/90"]; f != nil {
 			e["Feedback"] = f
 		}
-		out([]any{e})
+		es := []any{e}
+		if f := st.feedback["group/91"]; f != nil {
+			es = append(es, map[string]any{"Entity": map[string]any{"EntityId": 91, "EntityType": "Group", "Name": "T2-G 2", "Active": true}, "Feedback": f})
+		}
+		out(es)
+	case strings.HasPrefix(p, "/d2l/api/le/1.2/5/dropbox/folders/50/feedback/"):
+		if f := st.feedback[strings.TrimPrefix(p, "/d2l/api/le/1.2/5/dropbox/folders/50/feedback/")]; f != nil {
+			out(f)
+		} else {
+			http.NotFound(w, r)
+		}
 	case p == "/d2l/api/le/1.2/5/dropbox/folders/50/submissions/1/files/700":
 		w.Write([]byte("pdf"))
 	case p == "/d2l/api/lp/1.1/5/groupcategories/9/groups/":

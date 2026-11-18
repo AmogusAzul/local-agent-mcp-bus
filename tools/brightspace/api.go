@@ -21,8 +21,9 @@ type api struct {
 	now  func() time.Time
 
 	jobs    jobs
-	staff   bool          // staff tools are on (BRIGHTSPACE_STAFF=1)
-	jobWait time.Duration // how long a call waits for a background job
+	staff   bool              // staff tools are on (BRIGHTSPACE_STAFF=1)
+	seen    map[string]string // state each write preview showed, by target (guarded by mu)
+	jobWait time.Duration     // how long a call waits for a background job
 
 	mu      sync.Mutex
 	lp, le  string

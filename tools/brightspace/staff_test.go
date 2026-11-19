@@ -9,8 +9,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/AmogusAzul/local-agent-mcp-bus/core"
 )
 
 // staffSite serves course 5, which the user teaches. writes collects every
@@ -26,7 +24,6 @@ type staffSite struct {
 
 func newStaffAPI(t *testing.T) (*api, *fakeSite, *staffSite) {
 	a, site, _ := newTestAPI(t, true)
-	a.staff = true
 	st := &staffSite{
 		feedback: map[string]map[string]any{
 			"group/90": {"Score": 4.0, "Feedback": map[string]string{"Text": "Good start", "Html": "<p>Good start</p>"}, "IsGraded": false, "RubricAssessments": []any{}},
@@ -234,33 +231,19 @@ func TestStaffCourseGate(t *testing.T) {
 	}
 }
 
-func TestStaffToolsOptIn(t *testing.T) {
-	a := newAPI(newSession("https://x"))
-	size := func(ts []core.Tool) int {
-		n := 0
-		for _, tl := range ts {
-			n += len(tl.Name) + len(tl.Description)
-			for _, a := range tl.Args {
-				n += len(a.Name) + len(a.Description)
-			}
-		}
-		return n
-	}
-	student := newTools(a)
-	for _, tl := range student {
-		if tl.Name == "brightspace_staff" {
-			t.Fatal("staff tool without BRIGHTSPACE_STAFF")
+func TestToolTextFitsBudget(t *testing.T) {
+	ts := newTools(newAPI(newSession("https://x")))
+	n := 0
+	for _, tl := range ts {
+		n += len(tl.Name) + len(tl.Description)
+		for _, a := range tl.Args {
+			n += len(a.Name) + len(a.Description)
 		}
 	}
-	a.staff = true
-	staff := newTools(a)
-	if len(staff) <= len(student) {
-		t.Fatal("no staff tools with staff on")
+	if n > 8000 {
+		t.Fatalf("tool text is %d bytes", n)
 	}
-	if n := size(staff); n > 8000 {
-		t.Fatalf("staff tool text is %d bytes", n)
-	}
-	t.Logf("tool text: %d bytes student, %d with staff", size(student), size(staff))
+	t.Logf("%d tools, %d bytes of tool text", len(ts), n)
 }
 
 func TestSubmissionsView(t *testing.T) {
@@ -335,8 +318,7 @@ func TestSyncSubmissions(t *testing.T) {
 	if err != nil || !strings.Contains(out, "1 downloaded") || !strings.Contains(out, "mark unread") {
 		t.Fatalf("%q %v", out, err)
 	}
-	a.staff = false
-	if _, err := a.toolSync(context.Background(), map[string]string{"assignment": "taller 2", "dest": dest}); code(err) != "NOT_STAFF" {
-		t.Fatalf("without staff: %v", err)
+	if _, err := a.toolSync(context.Background(), map[string]string{"course": "calc", "assignment": "homework", "dest": dest}); code(err) != "NOT_STAFF" {
+		t.Fatalf("student course: %v", err)
 	}
 }

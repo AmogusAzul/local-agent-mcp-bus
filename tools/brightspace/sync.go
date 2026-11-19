@@ -189,9 +189,6 @@ func (a *api) startSync(ctx context.Context, what, dest string, work []syncItem,
 // syncSubmissions mirrors one folder's submissions (staff), one subfolder
 // per user or group.
 func (a *api) syncSubmissions(ctx context.Context, args map[string]string, maxBytes int64, types map[string]bool) (string, error) {
-	if !a.staff {
-		return "", fail("NOT_STAFF", "the server runs without staff tools (BRIGHTSPACE_STAFF=1).", "Mirroring submissions is a staff feature")
-	}
 	c, f, err := a.staffFolder(ctx, args["course"], args["assignment"])
 	if err != nil {
 		return "", err

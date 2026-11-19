@@ -64,10 +64,11 @@ A GET-only sweep on 2026-11-17 (full table in the local
      use graduates to a curated tool once its requests are recorded in a spec.
   Every layer acts as the user, with the user's permissions; the site decides what's
   allowed.
-- **Same binary, staff tools opt-in.** The TA tools add about 3 KB to `tools/list`.
-  Students don't need them, so they're registered only when the server starts with
-  `BRIGHTSPACE_STAFF=1` (set in the Desktop config entry). Without it the server is
-  stage 1 plus the student fixes below.
+- **Same binary, staff tools for everyone.** The TA tools are always registered
+  (about 3.4 KB more of `tools/list`, 7.2 KB in all). A student who calls one gets
+  `NOT_STAFF`, and the site would refuse the write anyway. (An opt-in through
+  `BRIGHTSPACE_STAFF=1` was built first and dropped: the site already enforces the
+  role, so a switch only hides tools.)
 - **Staff tools check the role per course.** A staff tool in a course where the user
   isn't staff (no `Instructor` LIS role) answers `NOT_STAFF` before any other call.
   `course` matching for staff tools only considers staff courses, so a course code
@@ -125,7 +126,7 @@ Student and shared (always on):
 | `brightspace_people` | Course roster: name, role, group; `contact=true` adds email and code. `group` filters to a group. | `course` (req), `group`, `role`, `contact` |
 | `brightspace_groups` | Group categories and groups, members, seats left, self-enrollment window; marks the user's group. | `course` (req), `category` |
 
-Staff (with `BRIGHTSPACE_STAFF=1`):
+Staff (always on; `NOT_STAFF` outside taught courses):
 
 | Tool | Does | Args |
 |---|---|---|
@@ -134,7 +135,7 @@ Staff (with `BRIGHTSPACE_STAFF=1`):
 | `brightspace_feedback` | Preview, or with `confirm` save, score + feedback text + rubric levels for a user/group (or `from` a file); draft unless `publish=true`. `publish_all=true` publishes the folder's drafts. | `course`, `assignment` (req), `who`, `score`, `text`, `rubric`, `from`, `publish`, `publish_all`, `confirm` |
 | `brightspace_gradebook` | Grade items with stats, or one item's values for everyone, or one student's row (with private comments). | `course` (req), `item`, `who` |
 | `brightspace_grade` | Preview / confirm grade values on a grade item (not a folder), one student or `from` a file. | `course`, `item` (req), `who`, `value`, `comment`, `private`, `from`, `confirm` |
-| `brightspace_quiz_results` | A quiz's attempts: per student best score, attempts, time taken; or one student's attempts. | `course`, `quiz` (req), `who` |
+| `brightspace_quiz_results` | A quiz's attempts: per student best score (quiz points; the quiz API gives no maximum), attempts, time taken, who has none; or one student's attempts. | `course`, `quiz` (req), `who` |
 | `brightspace_announce` | Preview / confirm a news item (title, body as markdown → HTML, optional start date, attachments). | `course` (req), `title` (req), `body` (req), `start`, `files`, `confirm` |
 | `brightspace_extension` | Preview / confirm special access (new due/end date) on a folder for a user. | `course`, `assignment` (req), `who` (req), `due`, `end`, `confirm` |
 | `brightspace_group_move` | Preview / confirm adding/removing a student to/from a group. | `course`, `category` (req), `who` (req), `to`, `from_group`, `confirm` |
@@ -159,7 +160,7 @@ Generic (always on; writes through them still need `confirm`):
 - Unit tests with the fake server: role gating (`NOT_STAFF`), staff course matching,
   every preview sends nothing, batch file parsing and the 200-row cap, stop at the
   first error, `CONFLICT` on a changed value, the group submit route and its refusal,
-  the 404 mapping, `BRIGHTSPACE_STAFF` toggling the tool list.
+  the 404 mapping, the tool text budget.
 - Live, read-only: `brightspace_staff`, `_submissions`, `_gradebook`,
   `_quiz_results`, `_people`, `_groups`, `_calendar` against a taught course.
 - **No test writes in taught courses.** Write tools are checked
@@ -167,7 +168,7 @@ Generic (always on; writes through them still need `confirm`):
   (grading a Taller, a real announcement), previewed and confirmed one call at a
   time. The student side gets its live check from the next real group submission
   through `brightspace_submit`.
-- `tools/list` stays near 4 KB without staff tools and under 8 KB with them.
+- `tools/list` stays under 8 KB of tool text.
 
 ## Out of scope
 
@@ -195,10 +196,10 @@ Generic (always on; writes through them still need `confirm`):
 1b. `brightspace_api` (with the route catalog) and `brightspace_web`. Commit. From
    here every site action is reachable; the steps below make the common ones cheap.
 2. `brightspace_people`, `_groups`, `_calendar`, `_updates`. Commit.
-3. Role detection, `BRIGHTSPACE_STAFF`, staff course matching, `NOT_STAFF`; read
-   tools `_staff`, `_submissions`, `_gradebook`, `_quiz_results`; `sync assignment=`.
-   Commit.
-4. Write tools, one commit each after its live check: `_feedback`, `_grade`,
-   `_announce`, `_extension`, `_group_move`.
-5. `register-claude-desktop.sh`: optional env for the brightspace entry. README
-   wording proposed to the user.
+3. Role detection, staff course matching, `NOT_STAFF`; read tools `_staff`,
+   `_submissions`, `_gradebook`, `_quiz_results`; `sync assignment=`. Commit.
+4. Write tools, one commit each, checked against the fake server and with live
+   previews (nothing sent): `_feedback`, `_grade`, `_announce`, `_extension`,
+   `_group_move`. Their first live writes happen on real work (see Check).
+5. Staff tools for everyone (no install switch). README wording proposed to the
+   user.

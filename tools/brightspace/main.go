@@ -2,7 +2,6 @@
 package main
 
 import (
-	"os"
 	"time"
 
 	"github.com/AmogusAzul/local-agent-mcp-bus/core"
@@ -83,6 +82,7 @@ func newTools(a *api) []core.Tool {
 				{Name: "types", Description: "extensions, comma-separated (e.g. pdf,pptx)"},
 				{Name: "max_mb", Description: "skip files bigger than this"},
 				{Name: "job", Description: "job id to follow"},
+				{Name: "assignment", Description: "staff: mirror this assignment's submissions instead"},
 			},
 			Execute: a.toolSync,
 		},
@@ -162,18 +162,11 @@ func newTools(a *api) []core.Tool {
 			Execute: a.toolWeb,
 		},
 	}
-	if !a.staff {
-		return ts
-	}
-	for i := range ts {
-		if ts[i].Name == "brightspace_sync" {
-			ts[i].Args = append(ts[i].Args, core.Arg{Name: "assignment", Description: "staff: mirror this assignment's submissions instead"})
-		}
-	}
 	return append(ts, staffTools(a)...)
 }
 
-// staffTools are registered only with BRIGHTSPACE_STAFF=1. See spec/brightspace-ta.md.
+// staffTools act in courses the user teaches (e.g. as Monitor); elsewhere they
+// answer NOT_STAFF. See spec/brightspace-ta.md.
 func staffTools(a *api) []core.Tool {
 	course := core.Arg{Name: "course", Description: "course id or name fragment (staff courses)"}
 	return []core.Tool{
@@ -294,6 +287,5 @@ func main() {
 	s := newSession(siteURL)
 	a := newAPI(s)
 	a.jobWait = 30 * time.Second
-	a.staff = os.Getenv("BRIGHTSPACE_STAFF") == "1"
 	core.Serve("brightspace", "0.1.0", newTools(a)...)
 }

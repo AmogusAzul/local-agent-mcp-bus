@@ -588,23 +588,6 @@ func TestFormatting(t *testing.T) {
 	}
 }
 
-func TestToolListIsCompact(t *testing.T) {
-	ts := newTools(newAPI(newSession("https://x")))
-	n := 0
-	for _, tl := range ts {
-		n += len(tl.Name) + len(tl.Description)
-		for _, a := range tl.Args {
-			n += len(a.Name) + len(a.Description)
-		}
-	}
-	if n > 5200 {
-		t.Fatalf("tool text is %d bytes", n)
-	}
-	if len(ts) != 15 {
-		t.Fatalf("%d tools", len(ts))
-	}
-}
-
 func TestAssignment(t *testing.T) {
 	a, _, _ := newTestAPI(t, true)
 	out, err := a.toolAssignment(context.Background(), map[string]string{"course": "calc", "assignment": "homework"})

@@ -1,4 +1,4 @@
-package main
+package bs
 
 import (
 	"context"
@@ -359,7 +359,7 @@ func (a *api) downloadAssignFile(ctx context.Context, args map[string]string, c 
 	}
 	dest := args["dest"]
 	if dest == "" {
-		dest = defaultDest(c)
+		dest = a.defaultDest(c)
 	}
 	path, n, err := saveTo(dest, remoteName(resp, af.FileName), resp.Body)
 	if err != nil {

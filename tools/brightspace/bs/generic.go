@@ -1,4 +1,4 @@
-package main
+package bs
 
 import (
 	"bytes"
@@ -179,14 +179,19 @@ func (a *api) toolAPI(ctx context.Context, args map[string]string) (string, erro
 	if len(body) > 0 && !json.Valid(body) {
 		return "", invalid("body must be JSON")
 	}
-	if method != "GET" && args["confirm"] != "true" {
+	if method != "GET" {
 		var b strings.Builder
 		fmt.Fprintf(&b, "%s %s\n", method, path)
 		if len(body) > 0 {
 			fmt.Fprintf(&b, "Body: %s\n", trunc(string(body), 2000))
 		}
-		b.WriteString("\nNothing was sent. This acts as the user on the live site. Show it to the user and, once they agree, call again with confirm=true.")
-		return b.String(), nil
+		if args["confirm"] != "true" {
+			b.WriteString("\nNothing was sent. This acts as the user on the live site. Show it to the user and, once they agree, call again with confirm=true.")
+			return b.String(), nil
+		}
+		if err := a.approved(ctx, b.String()); err != nil {
+			return "", err
+		}
 	}
 	resp, err := a.send(ctx, func(string) (*http.Request, error) {
 		var rd io.Reader
@@ -490,19 +495,22 @@ func (a *api) toolWeb(ctx context.Context, args map[string]string) (string, erro
 		u.RawQuery = q.Encode()
 		action = u.String()
 	}
-	if args["confirm"] != "true" {
-		var b strings.Builder
-		fmt.Fprintf(&b, "%s %s\n", method, action)
-		for k, vs := range values {
-			for _, v := range vs {
-				if strings.HasPrefix(k, "d2l_") {
-					v = trunc(v, 20)
-				}
-				fmt.Fprintf(&b, "  %s=%s\n", k, trunc(v, 300))
+	var pv strings.Builder
+	fmt.Fprintf(&pv, "%s %s\n", method, action)
+	for k, vs := range values {
+		for _, v := range vs {
+			if strings.HasPrefix(k, "d2l_") {
+				v = trunc(v, 20)
 			}
+			fmt.Fprintf(&pv, "  %s=%s\n", k, trunc(v, 300))
 		}
-		b.WriteString("\nNothing was sent. This acts as the user on the live site. Show it to the user and, once they agree, call again with confirm=true.")
-		return b.String(), nil
+	}
+	if args["confirm"] != "true" {
+		pv.WriteString("\nNothing was sent. This acts as the user on the live site. Show it to the user and, once they agree, call again with confirm=true.")
+		return pv.String(), nil
+	}
+	if err := a.approved(ctx, pv.String()); err != nil {
+		return "", err
 	}
 	var form url.Values
 	if method == "POST" {

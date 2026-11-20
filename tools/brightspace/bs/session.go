@@ -1,4 +1,4 @@
-package main
+package bs
 
 import (
 	"context"
@@ -55,11 +55,20 @@ type login struct {
 var errExpired = errors.New("session expired")
 
 func newSession(site string) *session {
+	return newSessionIn(site, defaultDataDir())
+}
+
+// defaultDataDir is where the cache and browser profile live unless the
+// caller picks another folder (Config.DataDir).
+func defaultDataDir() string {
 	dir, err := os.UserConfigDir()
 	if err != nil {
 		dir = os.TempDir()
 	}
-	root := filepath.Join(dir, "local-agent-mcp-bus")
+	return filepath.Join(dir, "local-agent-mcp-bus")
+}
+
+func newSessionIn(site, root string) *session {
 	return &session{
 		site: site,
 		path: filepath.Join(root, "brightspace.json"),

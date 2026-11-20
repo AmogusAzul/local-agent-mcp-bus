@@ -1,4 +1,4 @@
-package main
+package bs
 
 import (
 	"context"
@@ -126,6 +126,9 @@ func (a *api) toolGroupMove(ctx context.Context, args map[string]string) (string
 	if args["confirm"] != "true" {
 		b.WriteString(strings.TrimPrefix(notSent, "\n"))
 		return b.String(), nil
+	}
+	if err := a.approved(ctx, b.String()); err != nil {
+		return "", err
 	}
 	base := fmt.Sprintf("/%d/groupcategories/%d/groups/", c.ID, cat.ID)
 	if from != nil {

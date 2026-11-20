@@ -1,4 +1,4 @@
-package main
+package bs
 
 import (
 	"context"
@@ -164,6 +164,9 @@ func (a *api) toolGrade(ctx context.Context, args map[string]string) (string, er
 		}
 		b.WriteString("Whether students see it follows the item's release settings." + notSent)
 		return b.String(), nil
+	}
+	if err := a.approved(ctx, b.String()); err != nil {
+		return "", err
 	}
 	written := 0
 	var back strings.Builder

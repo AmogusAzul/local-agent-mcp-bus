@@ -1,4 +1,4 @@
-package main
+package bs
 
 import (
 	"context"
@@ -278,6 +278,9 @@ func (a *api) toolFeedback(ctx context.Context, args map[string]string) (string,
 		b.WriteString("Drafts stay hidden from students until published." + notSent)
 		return b.String(), nil
 	}
+	if err := a.approved(ctx, b.String()); err != nil {
+		return "", err
+	}
 
 	written := 0
 	for _, p := range plans {
@@ -383,6 +386,9 @@ func (a *api) publishAll(ctx context.Context, c course, f folder, confirm bool) 
 		}
 		b.WriteString(strings.TrimPrefix(notSent, "\n"))
 		return b.String(), nil
+	}
+	if err := a.approved(ctx, b.String()); err != nil {
+		return "", err
 	}
 	written := 0
 	for _, p := range plans {

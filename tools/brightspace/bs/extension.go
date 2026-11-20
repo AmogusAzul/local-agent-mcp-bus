@@ -1,4 +1,4 @@
-package main
+package bs
 
 import (
 	"context"
@@ -126,6 +126,9 @@ func (a *api) toolExtension(ctx context.Context, args map[string]string) (string
 		a.remember(key, old.state())
 		b.WriteString(strings.TrimPrefix(notSent, "\n"))
 		return b.String(), nil
+	}
+	if err := a.approved(ctx, b.String()); err != nil {
+		return "", err
 	}
 	if err := a.checkSeen(key, old.state(), m.DisplayName+"'s special access"); err != nil {
 		return "", err

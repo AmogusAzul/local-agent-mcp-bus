@@ -1,4 +1,4 @@
-package main
+package bs
 
 import (
 	"context"
@@ -23,6 +23,10 @@ type api struct {
 	jobs    jobs
 	seen    map[string]string // state each write preview showed, by target (guarded by mu)
 	jobWait time.Duration     // how long a call waits for a background job
+
+	downloads   string                                          // parent of each course's default folder; empty means Downloads/brightspace
+	approve     func(ctx context.Context, preview string) error // asks before a confirmed write; nil allows
+	checkSubmit func(SubmitTarget) error                        // may refuse a submission target; nil allows
 
 	mu      sync.Mutex
 	lp, le  string

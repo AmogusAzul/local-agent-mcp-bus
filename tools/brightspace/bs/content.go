@@ -1,4 +1,4 @@
-package main
+package bs
 
 import (
 	"context"
@@ -193,16 +193,20 @@ func remoteName(resp *http.Response, fallback string) string {
 }
 
 // defaultDest is where downloads go when no destination is given.
-func defaultDest(c course) string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		home = "."
+func (a *api) defaultDest(c course) string {
+	root := a.downloads
+	if root == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			home = "."
+		}
+		root = filepath.Join(home, "Downloads", "brightspace")
 	}
 	code := c.Code
 	if code == "" {
 		code = strconv.FormatInt(c.ID, 10)
 	}
-	return filepath.Join(home, "Downloads", "brightspace", safeName(code))
+	return filepath.Join(root, safeName(code))
 }
 
 // saveTo streams body into dir/name through a temporary file.
@@ -261,7 +265,7 @@ func (a *api) toolDownload(ctx context.Context, args map[string]string) (string,
 	}
 	dest := args["dest"]
 	if dest == "" {
-		dest = defaultDest(c)
+		dest = a.defaultDest(c)
 	}
 	resp, err := a.topicFile(ctx, c.ID, t.ID)
 	if err != nil {

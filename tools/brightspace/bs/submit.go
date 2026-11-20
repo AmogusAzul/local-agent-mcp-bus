@@ -1,4 +1,4 @@
-package main
+package bs
 
 import (
 	"context"
@@ -173,6 +173,16 @@ func (a *api) toolSubmit(ctx context.Context, args map[string]string) (string, e
 		grp = &gs[0]
 	}
 
+	if a.checkSubmit != nil {
+		t := SubmitTarget{CourseCode: c.Code, CourseName: c.Name, Folder: f.Name}
+		if grp != nil {
+			t.Group = grp.Name
+		}
+		if err := a.checkSubmit(t); err != nil {
+			return "", err
+		}
+	}
+
 	prior, _ := a.mySubmissions(ctx, c.ID, f)
 	var b strings.Builder
 	fmt.Fprintf(&b, "Course: %s\nAssignment: %s (id %d)\n", c, f.Name, f.ID)
@@ -193,6 +203,9 @@ func (a *api) toolSubmit(ctx context.Context, args map[string]string) (string, e
 	if args["confirm"] != "true" {
 		b.WriteString("\nNothing was sent. Show this to the user and, once they agree, call again with confirm=true.")
 		return b.String(), nil
+	}
+	if err := a.approved(ctx, b.String()); err != nil {
+		return "", err
 	}
 
 	resp, err := a.send(ctx, func(string) (*http.Request, error) {

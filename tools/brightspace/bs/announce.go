@@ -1,4 +1,4 @@
-package main
+package bs
 
 import (
 	"context"
@@ -55,6 +55,9 @@ func (a *api) toolAnnounce(ctx context.Context, args map[string]string) (string,
 	if args["confirm"] != "true" {
 		b.WriteString("Delete or edit it later on the site." + notSent)
 		return b.String(), nil
+	}
+	if err := a.approved(ctx, b.String()); err != nil {
+		return "", err
 	}
 
 	path, err := a.lePath(ctx, fmt.Sprintf("/%d/news/", c.ID))

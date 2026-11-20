@@ -1,4 +1,4 @@
-package main
+package bs
 
 import (
 	"context"
@@ -136,7 +136,7 @@ func (a *api) toolSync(ctx context.Context, args map[string]string) (string, err
 	}
 	dest := args["dest"]
 	if dest == "" {
-		dest = defaultDest(c)
+		dest = a.defaultDest(c)
 	}
 	ms, err := a.toc(ctx, c.ID)
 	if err != nil {
@@ -199,7 +199,7 @@ func (a *api) syncSubmissions(ctx context.Context, args map[string]string, maxBy
 	}
 	dest := args["dest"]
 	if dest == "" {
-		dest = filepath.Join(defaultDest(c), safeName(f.Name))
+		dest = filepath.Join(a.defaultDest(c), safeName(f.Name))
 	}
 	var work []syncItem
 	skipped := 0

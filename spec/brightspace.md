@@ -180,6 +180,28 @@ account signed in.
   Linux paths), and `BRIGHTSPACE_BROWSER` overrides it, so nothing in the design is
   Windows-only. The first target is the Windows `.exe`.
 
+## Use from other programs
+
+Added 2026-11-20 so Al día (`~/code/al-dia`, a separate product for classmates) can
+ship this connector without copying it.
+
+- The code lives in the package `tools/brightspace/bs`; `main.go` only builds the
+  `.exe`, which behaves as before.
+- Exported: `bs.Config{Site, DataDir, DownloadDir, Approve, CheckSubmit}`,
+  `bs.New(cfg) *bs.API`, `(*API).Tools() []core.Tool` (every tool, by its name) and
+  `bs.FindBrowser()`.
+  - `DataDir` holds the cache, the browser profile and the `updates` snapshot
+    (default `os.UserConfigDir()/local-agent-mcp-bus`). `DownloadDir` is the parent
+    of each course's default download folder (default `Downloads/brightspace`).
+  - `Approve(ctx, preview)`, when set, runs in every write after the preview is
+    built and the call has `confirm="true"`, before anything is sent. An error
+    stops the write and is returned as the tool's error. This lets a caller ask the
+    person in a window instead of trusting the model's `confirm`.
+  - `CheckSubmit(SubmitTarget)`, when set, sees the course, the folder name and the
+    group (if any) before `brightspace_submit` builds its preview, and can refuse.
+- Other programs pick and rename tools from `Tools()`; this repo's `.exe` keeps all
+  of them and sets no hooks.
+
 ## Interface
 
 | Tool | Does | Args |

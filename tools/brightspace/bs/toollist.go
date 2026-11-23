@@ -27,12 +27,23 @@ func newTools(a *api) []core.Tool {
 		},
 		{
 			Name:        "brightspace_announcements",
-			Description: "Recent course announcements as plain text.",
+			Description: "Course announcements as plain text with ids, newest first, one time page per call.",
 			Args: []core.Arg{
 				{Name: "course", Description: "course id or name fragment (default: all current)"},
-				{Name: "days", Description: "how far back (default 14)"},
+				{Name: "days", Description: "page length in days (default 14)"},
+				{Name: "offset", Description: "days back where the page ends (default 0)"},
+				{Name: "limit", Description: "max per course (default 10, up to 200)"},
 			},
 			Execute: a.toolAnnouncements,
+		},
+		{
+			Name:        "brightspace_announcement",
+			Description: "One announcement in full: title, date, body and attachment names.",
+			Args: []core.Arg{
+				{Name: "course", Description: "course id or name fragment", Required: true},
+				{Name: "id", Description: "announcement id", Required: true},
+			},
+			Execute: a.toolAnnouncement,
 		},
 		{
 			Name:        "brightspace_content",

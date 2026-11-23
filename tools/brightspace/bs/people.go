@@ -238,6 +238,7 @@ func (a *api) toolCalendar(ctx context.Context, args map[string]string) (string,
 		}
 		days = n
 	}
+	// Every current course, taught ones too: classes and exams matter to staff.
 	cs, err := a.courseOrCurrent(ctx, args["course"])
 	if err != nil {
 		return "", err
@@ -474,7 +475,8 @@ func orNone(s string) string {
 }
 
 func (a *api) toolUpdates(ctx context.Context, args map[string]string) (string, error) {
-	cs, err := a.courseOrCurrent(ctx, args["course"])
+	// Student-only: the snapshot tracks the user's own grades and assignments.
+	cs, skipped, err := a.studentCourses(ctx, args["course"])
 	if err != nil {
 		return "", err
 	}
@@ -533,14 +535,9 @@ func (a *api) toolUpdates(ctx context.Context, args map[string]string) (string, 
 	}
 	out := strings.TrimSpace(b.String())
 	if fresh > 0 {
-		note := fmt.Sprintf("First look at %d course(s): their state is saved, and the next call reports changes since now.", fresh)
-		if out == "" {
-			return note, nil
-		}
-		return out + "\n" + note, nil
+		out = withNote(out, fmt.Sprintf("First look at %d course(s): their state is saved, and the next call reports changes since now.", fresh))
+	} else if out == "" {
+		out = "Nothing new since the last check."
 	}
-	if out == "" {
-		return "Nothing new since the last check.", nil
-	}
-	return out, nil
+	return withNote(out, skippedNote(skipped)), nil
 }

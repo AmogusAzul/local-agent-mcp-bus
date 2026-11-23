@@ -326,3 +326,50 @@ func (a *api) courseOrCurrent(ctx context.Context, arg string) ([]course, error)
 	}
 	return []course{c}, nil
 }
+
+// studentCourses is courseOrCurrent for tools that read the user's own work
+// (due dates, grades, submissions, "what changed"). With no course given it
+// leaves out the courses the user teaches, whose student-only routes fail, and
+// returns them as skipped. A named course is kept either way.
+func (a *api) studentCourses(ctx context.Context, arg string) (cs, skipped []course, err error) {
+	all, err := a.courseOrCurrent(ctx, arg)
+	if err != nil || strings.TrimSpace(arg) != "" {
+		return all, nil, err
+	}
+	for _, c := range all {
+		if c.Staff {
+			skipped = append(skipped, c)
+		} else {
+			cs = append(cs, c)
+		}
+	}
+	return cs, skipped, nil
+}
+
+// skippedNote is the line that ends a reply when studentCourses skipped courses.
+func skippedNote(skipped []course) string {
+	if len(skipped) == 0 {
+		return ""
+	}
+	var codes []string
+	for _, c := range skipped {
+		if c.Code != "" {
+			codes = append(codes, c.Code)
+		} else {
+			codes = append(codes, c.Name)
+		}
+	}
+	return fmt.Sprintf("Skipped %d courses where you are staff (monitor/instructor): %s. Ask for one by name to include it.",
+		len(skipped), strings.Join(codes, ", "))
+}
+
+// withNote appends a non-empty note on its own line.
+func withNote(out, note string) string {
+	if note == "" {
+		return out
+	}
+	if out == "" {
+		return note
+	}
+	return out + "\n" + note
+}

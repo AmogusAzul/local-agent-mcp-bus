@@ -312,7 +312,8 @@ func (a *api) toolDue(ctx context.Context, args map[string]string) (string, erro
 		}
 		days = n
 	}
-	cs, err := a.courseOrCurrent(ctx, args["course"])
+	// Student-only: assignment status comes from the user's own submissions.
+	cs, skipped, err := a.studentCourses(ctx, args["course"])
 	if err != nil {
 		return "", err
 	}
@@ -386,7 +387,7 @@ func (a *api) toolDue(ctx context.Context, args map[string]string) (string, erro
 	for _, n := range notes {
 		b.WriteString("skipped " + n + "\n")
 	}
-	return strings.TrimSpace(b.String()), nil
+	return withNote(strings.TrimSpace(b.String()), skippedNote(skipped)), nil
 }
 
 type gradeValue struct {
@@ -433,7 +434,8 @@ func (g gradeValue) line() string {
 }
 
 func (a *api) toolGrades(ctx context.Context, args map[string]string) (string, error) {
-	cs, err := a.courseOrCurrent(ctx, args["course"])
+	// Student-only: myGradeValues fails in courses the user teaches.
+	cs, skipped, err := a.studentCourses(ctx, args["course"])
 	if err != nil {
 		return "", err
 	}
@@ -493,29 +495,62 @@ func (a *api) toolGrades(ctx context.Context, args map[string]string) (string, e
 			fmt.Fprintf(&b, "%s | %d graded items\n", c.Code, graded)
 		}
 	}
-	return strings.TrimSpace(b.String()), nil
+	return withNote(strings.TrimSpace(b.String()), skippedNote(skipped)), nil
 }
 
-func (a *api) toolAnnouncements(ctx context.Context, args map[string]string) (string, error) {
-	days := 14
-	if v := args["days"]; v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil || n < 1 || n > 365 {
-			return "", invalid("days must be a number from 1 to 365")
-		}
-		days = n
+// news is a course announcement.
+type news struct {
+	ID          int64 `json:"Id"`
+	Title       string
+	Body        struct{ Html, Text string }
+	StartDate   string
+	IsPublished bool
+	Attachments []fileRef
+}
+
+func (n news) text() string {
+	body := n.Body.Text
+	if body == "" {
+		body = plain(n.Body.Html)
 	}
+	return strings.TrimSpace(body)
+}
+
+// numArg reads an optional whole-number argument within [lo, hi].
+func numArg(args map[string]string, name string, def, lo, hi int) (int, error) {
+	v := args[name]
+	if v == "" {
+		return def, nil
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < lo || n > hi {
+		return 0, invalid("%s must be a number from %d to %d", name, lo, hi)
+	}
+	return n, nil
+}
+
+// toolAnnouncements shows one time page, [now-offset-days, now-offset), of
+// each course's news, newest first, and ends with how to ask for more.
+func (a *api) toolAnnouncements(ctx context.Context, args map[string]string) (string, error) {
+	days, err := numArg(args, "days", 14, 1, 365)
+	if err != nil {
+		return "", err
+	}
+	offset, err := numArg(args, "offset", 0, 0, 3650)
+	if err != nil {
+		return "", err
+	}
+	limit, err := numArg(args, "limit", 10, 1, 200)
+	if err != nil {
+		return "", err
+	}
+	// Every current course, taught ones too: staff read and post news.
 	cs, err := a.courseOrCurrent(ctx, args["course"])
 	if err != nil {
 		return "", err
 	}
-	since := a.now().AddDate(0, 0, -days)
-	type news struct {
-		Title       string
-		Body        struct{ Html, Text string }
-		StartDate   string
-		IsPublished bool
-	}
+	end := a.now().AddDate(0, 0, -offset)
+	since := end.AddDate(0, 0, -days)
 	type result struct {
 		items []news
 		err   error
@@ -530,6 +565,7 @@ func (a *api) toolAnnouncements(ctx context.Context, args map[string]string) (st
 		return result{ns, err}
 	})
 	var b strings.Builder
+	cut, most, older := 0, 0, false
 	for i, r := range results {
 		c := cs[i]
 		if r.err != nil {
@@ -538,23 +574,85 @@ func (a *api) toolAnnouncements(ctx context.Context, args map[string]string) (st
 		}
 		ns := r.items
 		sort.Slice(ns, func(i, j int) bool { return parseTime(ns[i].StartDate).After(parseTime(ns[j].StartDate)) })
-		shown := 0
+		in := 0
 		for _, n := range ns {
 			t := parseTime(n.StartDate)
-			if t.Before(since) || shown == 10 {
+			// The first page has no upper bound, so scheduled news stays visible.
+			if t.Before(since) {
+				older = true
 				continue
 			}
-			body := n.Body.Text
-			if body == "" {
-				body = plain(n.Body.Html)
+			if offset > 0 && !t.Before(end) {
+				continue
 			}
-			fmt.Fprintf(&b, "%s | %s | %s\n%s\n\n", when(t), c.Code, n.Title, trunc(strings.TrimSpace(body), 500))
-			shown++
+			in++
+			if in > limit {
+				continue
+			}
+			body := []rune(n.text())
+			fmt.Fprintf(&b, "%s | %s | %s | id %d\n", when(t), c.Code, n.Title, n.ID)
+			if len(body) > 500 {
+				fmt.Fprintf(&b, "%s… (%d more characters: brightspace_announcement course=%d id=%d)\n\n",
+					strings.TrimSpace(string(body[:500])), len(body)-500, c.ID, n.ID)
+			} else {
+				fmt.Fprintf(&b, "%s\n\n", string(body))
+			}
 		}
+		if in > limit {
+			cut += in - limit
+		}
+		most = max(most, in)
 	}
 	out := strings.TrimSpace(b.String())
 	if out == "" {
-		return fmt.Sprintf("No announcements in the last %d days.", days), nil
+		if offset == 0 {
+			out = fmt.Sprintf("No announcements in the last %d days.", days)
+		} else {
+			out = fmt.Sprintf("No announcements from %d to %d days ago.", offset+days, offset)
+		}
+	}
+	var more []string
+	if cut > 0 {
+		more = append(more, fmt.Sprintf("%d more in this window: limit=%d", cut, min(most, 200)))
+	}
+	if older {
+		next := fmt.Sprintf("older ones: offset=%d", offset+days)
+		if days != 14 {
+			next += fmt.Sprintf(" days=%d", days)
+		}
+		more = append(more, next)
+	}
+	if len(more) > 0 {
+		out += "\nMore: " + strings.Join(more, "; ")
 	}
 	return out, nil
+}
+
+// toolAnnouncement shows one announcement in full.
+func (a *api) toolAnnouncement(ctx context.Context, args map[string]string) (string, error) {
+	id, err := strconv.ParseInt(strings.TrimSpace(args["id"]), 10, 64)
+	if err != nil {
+		return "", invalid("id must be an announcement id from brightspace_announcements")
+	}
+	c, err := a.resolveCourse(ctx, args["course"])
+	if err != nil {
+		return "", err
+	}
+	path, err := a.lePath(ctx, fmt.Sprintf("/%d/news/%d", c.ID, id))
+	if err != nil {
+		return "", err
+	}
+	var n news
+	if err := a.getJSON(ctx, path, &n); err != nil {
+		return "", err
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s | %s | %s\n%s\n", when(parseTime(n.StartDate)), c.Code, n.Title, n.text())
+	if len(n.Attachments) > 0 {
+		b.WriteString("Attachments:")
+		for _, f := range n.Attachments {
+			fmt.Fprintf(&b, "\n  %s (%s)", f.FileName, size(f.Size))
+		}
+	}
+	return strings.TrimSpace(b.String()), nil
 }
